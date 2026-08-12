@@ -1,0 +1,21 @@
+name: fast-demo
+description: Reduced-cost local smoke-test profile; not benchmark-equivalent.
+
+application:
+  model_id: google/vit-base-patch16-224
+  openai_model: gpt-5-mini
+  device: auto
+  send_visuals_to_agent: false
+  output_root: outputs
+
+experiment:
+  lime_num_samples: 100
+  lime_batch_size: 20
+  inference_batch_size: 16
+  random_seed: 42
+  hide_color: 0
+  critical_area_fraction: 0.20
+  omission_rgb: [0, 0, 0]
+  slic_n_segments: 60
+  watershed_markers: 60
+  colorlime_k: 64
