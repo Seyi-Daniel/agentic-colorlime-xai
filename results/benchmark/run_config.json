@@ -1,0 +1,66 @@
+{
+  "checkpoint_every": 10,
+  "critical_area_fraction": 0.2,
+  "dataset_name": "ILSVRC/imagenet-1k",
+  "dataset_split": "validation",
+  "device": "auto",
+  "device_resolved": "cuda",
+  "fast_gpu_preprocess": false,
+  "image_column": "image",
+  "k_colors": 256,
+  "kmeans_n_init": 3,
+  "label_column": "label",
+  "lime_batch_size": 32,
+  "methods": [
+    {
+      "display_name": "Default LIME",
+      "is_color_lime": false,
+      "key": "default_lime",
+      "short_name": "Default LIME"
+    },
+    {
+      "display_name": "Color-LIME \u2014 Black",
+      "is_color_lime": true,
+      "key": "color_black",
+      "short_name": "Color Black"
+    },
+    {
+      "display_name": "Color-LIME \u2014 Structure-Preserving Fixed",
+      "is_color_lime": true,
+      "key": "structure_fixed",
+      "short_name": "Structure Fixed"
+    },
+    {
+      "display_name": "Color-LIME \u2014 Structure-Preserving Fresh",
+      "is_color_lime": true,
+      "key": "structure_fresh",
+      "short_name": "Structure Fresh"
+    },
+    {
+      "display_name": "Color-LIME \u2014 Independent-Color Fixed",
+      "is_color_lime": true,
+      "key": "independent_fixed",
+      "short_name": "Independent Fixed"
+    },
+    {
+      "display_name": "Color-LIME \u2014 Independent-Color Fresh",
+      "is_color_lime": true,
+      "key": "independent_fresh",
+      "short_name": "Independent Fresh"
+    }
+  ],
+  "model_id": "google/vit-base-patch16-224",
+  "model_microbatch": 128,
+  "no_comparison_sheets": false,
+  "num_images": 100,
+  "num_samples": 1000,
+  "output_dir": "results/benchmark",
+  "overwrite": false,
+  "precision": "auto",
+  "resume": true,
+  "seed": 42,
+  "self_test": false,
+  "start_index": 0,
+  "streaming": false,
+  "provenance_note": "output_dir is repository-relative; experiment-defining values match the original run."
+}
