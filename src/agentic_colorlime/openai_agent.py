@@ -16,7 +16,7 @@ from .image_io import image_to_data_url
 
 if TYPE_CHECKING:
     from .runtime import ToolRuntime
-from .tool_catalog import ToolCard
+from .tool_catalog import EXPLAINERS, ToolCard
 
 
 BASE_INSTRUCTIONS = """
@@ -26,6 +26,12 @@ You have local source-inspection, explanation, CIR-evaluation, evidence-review,
 and final-selection tools. Use one tool per step.
 
 Rules:
+- First select an explainer (LIME, sparse LIME with Lasso, or Kernel SHAP),
+  then choose one of its available segmentations. Repeat that hierarchy for
+  each comparison. The classifier and target class stay fixed for this image.
+- A SHAP additivity residual checks accounting, not explanation quality.
+  Do not compare SHAP diagnostics with LIME's surrogate R-squared as one score.
+- Compare CIR with the actual removed area and masking baseline in mind.
 - Tool names and inspected source code are prior evidence, not observed quality.
 - Inspect source only when it would reduce uncertainty about a method.
 - Before executing an explanation method, state the current reason for trying it
@@ -99,11 +105,27 @@ def method_tool(card: ToolCard) -> dict[str, Any]:
         "type": "function",
         "name": card.function_name,
         "description": (
-            f"Execute the registered local '{card.method}' segmentation function "
-            "and use its labels to create one LIME explanation candidate."
+            f"Execute the '{card.segmentation_method}' segmentation function "
+            f"and create one '{card.explainer}' explanation candidate."
         ),
         "parameters": _method_parameters(),
         "strict": True,
+    }
+
+
+def explainer_tool(explainers: list[str]) -> dict[str, Any]:
+    return {
+        "type": "function", "name": "select_explainer", "strict": True,
+        "description": "Choose an explanation algorithm before choosing its segmentation. "
+                       + json.dumps({name: EXPLAINERS[name] for name in explainers}),
+        "parameters": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "explainer": {"type": "string", "enum": explainers},
+                "rationale": {"type": "string", "description": "Why try this explainer now?"},
+            },
+            "required": ["explainer", "rationale"],
+        },
     }
 
 
@@ -145,7 +167,7 @@ def cir_tool(candidate_id: str) -> dict[str, Any]:
         "name": "calculate_cir",
         "description": (
             f"Calculate CIR for the newly created candidate {candidate_id}. This removes the strongest "
-            "positive LIME regions up to the area target and measures the target-class probability drop. "
+            "positive-attribution regions up to the area target and measures the target-class probability drop. "
             "It is evidence, not an automatic selection rule."
         ),
         "parameters": {
@@ -182,7 +204,7 @@ def evidence_review_tool(candidate_id: str, method: str) -> dict[str, Any]:
                 "evidence_summary": {
                     "type": "string",
                     "description": (
-                        "A short summary of the observed explanation, LIME, CIR, "
+                        "A short summary of the observed explanation, explainer diagnostics, CIR, "
                         "runtime, and visual evidence that was actually supplied."
                     ),
                 },
@@ -267,7 +289,7 @@ def finish_tool() -> dict[str, Any]:
                     "type": "string",
                     "description": (
                         "Concise evidence-based justification for selecting this explanation, including "
-                        "the relevant qualitative, LIME, CIR, and cost evidence that was actually observed."
+                        "the relevant qualitative, explainer, CIR, and cost evidence that was actually observed."
                     ),
                 },
                 "cir_assessment": {
@@ -437,8 +459,7 @@ class OpenAIAdaptiveAgent:
             "There is no application-set tool-call budget. You decide how many methods are necessary.\n"
             f"Registered identifiers:\n{json.dumps(registered, indent=2)}\n\n"
             f"Visual context: {visual_note}\n\n"
-            "Choose one legal next action. You may inspect a function's local "
-            "source first, or execute the most promising method directly."
+            "Select an explainer first. Then inspect source if useful and execute a segmentation."
         )
 
     @staticmethod
@@ -448,6 +469,7 @@ class OpenAIAdaptiveAgent:
         visual_context_available: bool,
     ) -> str:
         state = {
+            "selected_explainer": runtime.selected_explainer,
             "explanation_tools_attempted": runtime.explanation_calls_used,
             "total_registered_explanation_tools": runtime.total_registered_tools,
             "pending_cir_candidate_id": runtime.pending_cir_candidate_id,
@@ -493,15 +515,25 @@ class OpenAIAdaptiveAgent:
             ], method_by_function
 
         tools: list[dict[str, Any]] = []
+        if runtime.selected_explainer is None:
+            explainers = runtime.available_explainers()
+            if explainers:
+                tools.append(explainer_tool(explainers))
+            if runtime.finish_authorized:
+                tools.append(finish_tool())
+            if tools:
+                return tools, method_by_function
+        eligible = [m for m in runtime.unattempted_methods()
+                    if runtime.catalog.get(m).explainer == runtime.selected_explainer]
         uninspected = [
             method
             for method in runtime.uninspected_methods()
-            if method in runtime.unattempted_methods()
+            if method in eligible
         ]
         if uninspected:
             tools.append(inspect_source_tool(uninspected))
 
-        for method in runtime.unattempted_methods():
+        for method in eligible:
             card = runtime.catalog.get(method)
             tools.append(method_tool(card))
             method_by_function[card.function_name] = card.method
@@ -662,6 +694,7 @@ class OpenAIAdaptiveAgent:
             extras = calls[1:]
             action_made_progress = False
             selected_method_for_call = method_by_function.get(primary.name)
+            legal_tool = primary.name in {tool["name"] for tool in tools}
 
             # Initialise this before parsing so it also exists when JSON parsing fails.
             arguments: dict[str, Any] = {}
@@ -675,7 +708,13 @@ class OpenAIAdaptiveAgent:
                 }
             else:
                 try:
-                    if selected_method_for_call is not None:
+                    if not legal_tool:
+                        raise ValueError(f"Tool is not legal in this state: {primary.name}")
+                    if primary.name == "select_explainer":
+                        result = runtime.select_explainer(str(arguments["explainer"]), str(arguments["rationale"]))
+                        action_made_progress = True
+
+                    elif selected_method_for_call is not None:
                         result = runtime.run_method(
                             selected_method_for_call,
                             selection_rationale=str(
@@ -758,7 +797,7 @@ class OpenAIAdaptiveAgent:
                         )
                         action_made_progress = True
 
-                    elif primary.name == "calculate_cir":
+                    elif legal_tool and primary.name == "calculate_cir":
                         failed_candidate_id = str(
                             arguments.get(
                                 "candidate_id",
@@ -779,7 +818,7 @@ class OpenAIAdaptiveAgent:
                             selected_method_for_call is not None
                         ),
                         "candidate_abandoned": (
-                            primary.name == "calculate_cir"
+                            legal_tool and primary.name == "calculate_cir"
                         ),
                     }
 
@@ -869,7 +908,7 @@ class OpenAIAdaptiveAgent:
                                 "text": (
                                     f"Visual evidence for candidate {result['candidate_id']}. "
                                     "Image 1 shows segmentation boundaries. Image 2 "
-                                    "shows the LIME critical-region overlay. Numeric "
+                                    "shows the selected positive-attribution regions. Numeric "
                                     "measurements remain authoritative."
                                 ),
                             },

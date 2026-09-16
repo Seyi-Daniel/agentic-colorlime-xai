@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentic-colorlime-xai"
 version = "0.1.0"
-description = "Code-grounded agentic selection and evaluation of image-LIME segmentation methods"
+description = "Agentic selection of image explainers and segmentation methods, with batch processing"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -27,6 +27,7 @@ classifiers = [
 ]
 dependencies = [
   "lime>=0.2.0.1",
+  "shap>=0.46,<0.51",
   "numpy>=1.26",
   "openai>=1.75.0",
   "pillow>=10.3",

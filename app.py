@@ -7,9 +7,8 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from agentic_colorlime.config import ExperimentConfig
-from agentic_colorlime.image_io import load_image_from_path, load_image_from_upload
 from agentic_colorlime.model_runner import HuggingFaceImageClassifier
-from agentic_colorlime.pipeline import run_experiment
+from agentic_colorlime.batch import ImageInput, run_batch
 from agentic_colorlime.segmentations import SEGMENTATION_FUNCTIONS
 
 load_dotenv()
@@ -28,9 +27,9 @@ with st.sidebar:
     uploaded = None
     local_path = ""
     if source == "Upload":
-        uploaded = st.file_uploader("Image", type=["png", "jpg", "jpeg", "webp", "bmp"])
+        uploaded = st.file_uploader("Images", type=["png", "jpg", "jpeg", "webp", "bmp"], accept_multiple_files=True)
     else:
-        local_path = st.text_input("Image path on the machine running Streamlit")
+        local_path = st.text_area("Image paths on this machine (one per line)")
 
     model_id = st.text_input(
         "Hugging Face model ID or local model directory",
@@ -54,21 +53,24 @@ with st.sidebar:
         value=True,
         help=(
             "Recommended. The agent receives downscaled copies of the original, "
-            "segmentation boundaries, LIME overlay, and CIR omission image. When "
+            "segmentation boundaries, explanation overlay, and CIR omission image. When "
             "disabled, it is forbidden from making visual claims."
         ),
     )
 
     st.header("Agent policy")
     st.info(
-        f"All {len(SEGMENTATION_FUNCTIONS)} registered explanation tools are exposed. "
+        f"The agent chooses LIME, sparse LIME (Lasso), or Kernel SHAP, then one of {len(SEGMENTATION_FUNCTIONS)} segmentations. "
         "There is no user-set minimum or maximum. The agent may inspect local "
         "function source, but no hand-written strengths or limitations are supplied. "
         "After every CIR calculation, a separate evidence review is required before "
         "the agent may continue or finish."
     )
 
-    st.header("LIME and CIR")
+    st.header("Explainers and CIR")
+    shap_samples = st.number_input("Kernel SHAP samples", 2, 10000, 512, step=2)
+    shap_max_segments = st.number_input("Kernel SHAP segment limit", 1, 2048, 256)
+    lasso_alpha = st.number_input("Sparse LIME Lasso alpha", min_value=0.000001, value=0.001, format="%.6f")
     lime_samples = st.number_input("LIME samples per attempted method", 50, 10000, 500, step=50)
     lime_batch = st.number_input("LIME outer batch size", 1, 512, 32)
     inference_batch = st.number_input("ViT inference microbatch", 1, 256, 16)
@@ -84,18 +86,20 @@ with st.sidebar:
 
     run_clicked = st.button("Run explanation agent", type="primary", use_container_width=True)
 
-if source == "Upload" and uploaded is not None:
-    image_array = load_image_from_upload(uploaded.getvalue())
-    st.image(image_array, caption="Input image", width=450)
+image_inputs = []
+if source == "Upload" and uploaded:
+    image_inputs = [ImageInput(item.name, item.getvalue()) for item in uploaded]
 elif source == "Local path" and local_path.strip():
+    from pathlib import Path
+
+    image_inputs = [ImageInput(Path(path.strip()).name, path.strip())
+                    for path in local_path.splitlines() if path.strip()]
+if image_inputs:
+    st.caption(f"{len(image_inputs)} image(s) selected. Each receives its own agent run.")
     try:
-        image_array = load_image_from_path(local_path)
-        st.image(image_array, caption="Input image", width=450)
+        st.image(image_inputs[0].load(), caption=f"First image: {image_inputs[0].name}", width=450)
     except Exception as exc:
-        image_array = None
-        st.error(str(exc))
-else:
-    image_array = None
+        st.warning(f"Cannot preview the first image: {exc}")
 
 
 @st.cache_resource(show_spinner="Loading Hugging Face model…")
@@ -109,8 +113,8 @@ def load_predictor(model_id_or_path: str, device_name: str, batch_size: int, tok
 
 
 if run_clicked:
-    if image_array is None:
-        st.error("Provide an image first.")
+    if not image_inputs:
+        st.error("Provide at least one image first.")
         st.stop()
     if not model_id.strip():
         st.error("Provide a Hugging Face model ID or local directory.")
@@ -121,6 +125,9 @@ if run_clicked:
 
     config = ExperimentConfig(
         lime_num_samples=int(lime_samples),
+        shap_num_samples=int(shap_samples),
+        shap_max_segments=int(shap_max_segments),
+        lime_lasso_alpha=float(lasso_alpha),
         lime_batch_size=int(lime_batch),
         inference_batch_size=int(inference_batch),
         critical_area_fraction=float(critical_area),
@@ -132,36 +139,52 @@ if run_clicked:
         quickshift_max_dist=int(q_max_dist),
     )
 
+    config.validate()
     predictor = load_predictor(model_id.strip(), device, int(inference_batch), hf_token.strip())
-    with st.status("The agent is deciding which explanation tool to use…", expanded=True) as status:
-        st.write(
-            f"All {len(SEGMENTATION_FUNCTIONS)} registered methods are available to the agent. "
-            "It may inspect code, run one or more methods, and must review the "
-            "evidence before explaining why it stops."
-        )
-        st.write("The first model run may download and cache Hugging Face files.")
-        result = run_experiment(
-            image=image_array,
-            model_id_or_path=model_id.strip(),
-            openai_api_key=api_key.strip(),
-            openai_model=openai_model.strip(),
-            hf_token=hf_token.strip() or None,
-            device=device,
-            send_visuals_to_agent=send_visuals,
-            config=config,
-            predictor=predictor,
-        )
-        status.update(label="Agent selection completed", state="complete", expanded=False)
+    progress = st.progress(0.0, text="Starting image explanations…")
 
-    st.session_state["latest_result"] = result
+    def update_progress(done, total, item):
+        progress.progress(done / total, text=f"{done}/{total}: {item['name']} — {item['status']}")
 
-result = st.session_state.get("latest_result")
+    with st.spinner("The agent is explaining each image…"):
+        batch = run_batch(
+            images=image_inputs, model_id_or_path=model_id.strip(),
+            openai_api_key=api_key.strip(), openai_model=openai_model.strip(),
+            hf_token=hf_token.strip() or None, device=device,
+            send_visuals_to_agent=send_visuals, config=config, predictor=predictor,
+            on_progress=update_progress,
+        )
+    st.session_state["latest_batch"] = batch
+
+batch = st.session_state.get("latest_batch")
+result = None
+if batch is not None:
+    st.header("Image results")
+    summary = batch.summary()
+    st.write(f"Completed: {summary['succeeded']} · Failed: {summary['failed']}")
+    st.dataframe(pd.DataFrame([
+        {"Image": item["name"], "Status": item["status"],
+         "Prediction": item.get("target_class_label", ""),
+         "Explainer": item.get("selected_candidate", {}).get("explainer", ""),
+         "Segmentation": item.get("selected_candidate", {}).get("segmentation_method", ""),
+         "Error": item.get("error", "")}
+        for item in batch.items
+    ]), hide_index=True, use_container_width=True)
+    st.caption(f"Batch summary and per-image records: {batch.batch_dir}")
+    if batch.results:
+        index = st.selectbox(
+            "View image explanation", options=list(batch.results),
+            format_func=lambda i: f"{i + 1}. {batch.items[i]['name']}",
+        )
+        result = batch.results[index]
+
 if result is not None:
     st.header("Final result")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Predicted class", result.target_class_label)
     c2.metric("Prediction probability", f"{result.target_probability:.4f}")
-    c3.metric("Selected segmentation", result.decision.final_method)
+    c3.metric("Selected explainer", result.selected_candidate["explainer"])
+    st.caption(f"Segmentation: {result.selected_candidate['segmentation_method']}")
     c4.metric("Explanation tools attempted", result.decision.explanation_calls_used)
 
     selected = result.selected_candidate
@@ -176,7 +199,12 @@ if result is not None:
         st.metric("Selected CIR", f"{selected['cir']:.6f}")
         st.metric("Relative CIR", f"{selected['relative_cir']:.4f}")
         st.metric("Critical area used", f"{selected['critical_area_fraction']:.3f}")
-        st.metric("LIME surrogate score", f"{selected['lime_local_surrogate_score']:.4f}")
+        if selected.get("local_surrogate_score") is not None:
+            st.metric("LIME surrogate score", f"{selected['local_surrogate_score']:.4f}")
+        elif selected.get("explainer") == "shap":
+            st.metric("SHAP additivity residual", f"{selected['explanation_diagnostics']['additivity_residual']:.6g}")
+        with st.expander("Explainer diagnostics"):
+            st.json(selected.get("explanation_diagnostics", {}))
 
     st.subheader("Agent decision")
     decision = result.decision.raw
@@ -230,14 +258,15 @@ if result is not None:
 
     frame = pd.DataFrame(result.candidates)
     visible_columns = [
-        "method",
+        "explainer",
+        "segmentation_method",
         "selection_rationale",
         "pre_call_confidence",
         "number_of_segments",
         "cir",
         "relative_cir",
         "critical_area_fraction",
-        "lime_local_surrogate_score",
+        "local_surrogate_score",
         "total_seconds",
         "decision_changed",
     ]
@@ -283,6 +312,9 @@ if result is not None:
         elif event.get("event") == "explanation_tool":
             row["decision"] = "execute"
             row["reason"] = event.get("arguments", {}).get("selection_rationale")
+        elif event.get("event") == "explainer_selection":
+            row["decision"] = event.get("result", {}).get("explainer")
+            row["reason"] = event.get("result", {}).get("rationale")
         elif event.get("event") == "source_inspection":
             row["decision"] = "inspect source"
         elif event.get("event") == "cir_tool":

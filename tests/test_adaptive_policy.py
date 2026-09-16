@@ -12,6 +12,7 @@ from agentic_colorlime.tool_catalog import ToolCatalog
 class FakeRuntime:
     def __init__(self):
         self.catalog = ToolCatalog()
+        self.selected_explainer = "lime"
         self.pending_cir_candidate_id = None
         self.pending_review_candidate_id = None
         self.finish_authorized = False
@@ -19,6 +20,13 @@ class FakeRuntime:
         self._evaluated: list[object] = []
         self.candidates_by_id: dict[str, object] = {}
         self.inspected_methods: set[str] = set()
+
+    def available_explainers(self):
+        return ["lime"] if self.unattempted_methods() else []
+
+    def select_explainer(self, explainer, rationale):
+        self.selected_explainer = explainer
+        return {"explainer": explainer, "rationale": rationale}
 
     def unattempted_methods(self):
         return sorted(set(SEGMENTATION_FUNCTIONS) - self._attempted)
@@ -40,7 +48,7 @@ def test_config_has_no_agent_tool_count_limits():
     assert not hasattr(config, "max_shortlist_expansions")
 
 
-def test_initial_round_exposes_source_inspection_and_every_method():
+def test_segmentation_round_exposes_source_inspection_and_every_lime_method():
     runtime = FakeRuntime()
     tools, mapping = OpenAIAdaptiveAgent._dynamic_tools(runtime)
     tool_names = {tool["name"] for tool in tools}
@@ -172,6 +180,7 @@ class _FakeResponses:
 
     def create(self, **payload):
         expected = [
+            "select_explainer",
             "run_slic_lime",
             "calculate_cir",
             "review_candidate_evidence",
@@ -180,6 +189,7 @@ class _FakeResponses:
         assert expected in {tool["name"] for tool in payload["tools"]}
 
         arguments = [
+            {"explainer": "lime", "rationale": "Test a local surrogate first."},
             {
                 "selection_rationale": "SLIC is a useful first test.",
                 "uncertainty_addressed": "Whether one candidate is sufficient.",
@@ -220,6 +230,7 @@ class _FakeResponses:
 class _LoopRuntime(FakeRuntime):
     def __init__(self):
         super().__init__()
+        self.selected_explainer = None
         self.image = np.zeros((4, 4, 3), dtype=np.uint8)
         self.image_profile = SimpleNamespace(
             qualitative_summary=lambda: "4x4 test image",
@@ -317,7 +328,7 @@ class _LoopRuntime(FakeRuntime):
         return None
 
 
-def test_full_loop_requires_method_then_cir_then_review_then_finish(tmp_path):
+def test_full_loop_requires_explainer_then_segmentation_then_cir_review_finish(tmp_path):
     runtime = _LoopRuntime()
     agent = object.__new__(OpenAIAdaptiveAgent)
     agent.client = SimpleNamespace(responses=_FakeResponses())

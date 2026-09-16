@@ -5,13 +5,14 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from .config import ExperimentConfig
 from .image_profile import ImageProfile, profile_image
-from .model_runner import HuggingFaceImageClassifier
+if TYPE_CHECKING:
+    from .model_runner import HuggingFaceImageClassifier
 from .openai_agent import AgentDecision, OpenAIAdaptiveAgent
 from .runtime import ToolRuntime
 
@@ -56,6 +57,8 @@ def run_experiment(
     profile: ImageProfile = profile_image(image_array)
 
     if predictor is None:
+        from .model_runner import HuggingFaceImageClassifier
+
         predictor = HuggingFaceImageClassifier(
             model_id_or_path,
             device=device,
@@ -80,7 +83,11 @@ def run_experiment(
         model=openai_model,
         audit_root=run_dir / "llm_audit",
     )
-    decision = agent.run(runtime, send_visuals_to_agent=send_visuals_to_agent)
+    try:
+        decision = agent.run(runtime, send_visuals_to_agent=send_visuals_to_agent)
+    finally:
+        # Preserve partial execution records if the agent or a remote request fails.
+        runtime.write_outputs()
 
     selected_candidate = runtime.candidates_by_id[decision.final_candidate_id].public_summary()
     candidates = runtime.all_public_summaries()

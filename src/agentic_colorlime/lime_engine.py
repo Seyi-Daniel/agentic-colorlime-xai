@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -12,15 +12,21 @@ from .config import ExperimentConfig
 
 
 @dataclass
-class LimeResult:
+class ExplanationResult:
     explanation: Any
     segments: np.ndarray
     positive_features: list[tuple[int, float]]
     critical_mask: np.ndarray
     selected_features: list[tuple[int, float]]
     actual_area_fraction: float
-    surrogate_score: float
+    surrogate_score: float | None
     lime_seconds: float
+    explainer: str = "lime"
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+# Preserve the existing Python API; runtime summaries use explanation_seconds.
+LimeResult = ExplanationResult
 
 
 def _score_for_label(explanation: Any, target_class_id: int) -> float:
@@ -66,10 +72,14 @@ def run_lime(
     target_class_id: int,
     segments: np.ndarray,
     config: ExperimentConfig,
+    variant: str = "lime",
 ) -> LimeResult:
     # Keep metric, policy, and segmentation tests lightweight. LIME is required
     # only when an explanation is actually executed.
     from lime import lime_image
+
+    if variant not in {"lime", "lime_lasso"}:
+        raise ValueError(f"Unknown LIME variant: {variant}")
 
     fixed_segments = np.asarray(segments, dtype=np.int32)
     if fixed_segments.shape != image.shape[:2]:
@@ -92,6 +102,13 @@ def run_lime(
     }
     if "progress_bar" in inspect.signature(explainer.explain_instance).parameters:
         kwargs["progress_bar"] = False
+    if variant == "lime_lasso":
+        from sklearn.linear_model import Lasso
+
+        kwargs["model_regressor"] = Lasso(
+            alpha=config.lime_lasso_alpha, max_iter=10000,
+            random_state=config.random_seed,
+        )
 
     started = time.perf_counter()
     explanation = explainer.explain_instance(**kwargs)
@@ -113,4 +130,15 @@ def run_lime(
         actual_area_fraction=area,
         surrogate_score=_score_for_label(explanation, target_class_id),
         lime_seconds=float(lime_seconds),
+        explainer=variant,
+        diagnostics={
+            "surrogate": "lasso" if variant == "lime_lasso" else "ridge",
+            "lasso_alpha": config.lime_lasso_alpha if variant == "lime_lasso" else None,
+            "num_samples": config.lime_num_samples,
+            "hide_color": config.hide_color,
+            "feature_weights": [
+                [int(feature), float(weight)]
+                for feature, weight in explanation.local_exp[int(target_class_id)]
+            ],
+        },
     )

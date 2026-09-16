@@ -8,6 +8,12 @@ from typing import Any
 class ToolCard:
     method: str
     function_name: str
+    explainer: str = "lime"
+    segmentation: str = ""
+
+    @property
+    def segmentation_method(self) -> str:
+        return self.segmentation or self.method
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -35,6 +41,22 @@ TOOL_CARDS: dict[str, ToolCard] = {
         function_name="run_colorlime",
     ),
 }
+
+EXPLAINERS = {
+    "lime": "Image LIME with its default weighted Ridge surrogate.",
+    "lime_lasso": "Image LIME with a Lasso surrogate and configured positive alpha; a sparse LIME variant, not LEMON.",
+    "shap": "Kernel SHAP over segment-presence features, using an all-hidden background and probability units. At most 10 nonzero features are fitted; inspect diagnostics and segment count.",
+}
+
+for _family in ("lime_lasso", "shap"):
+    for _segmentation in tuple(TOOL_CARDS):
+        if TOOL_CARDS[_segmentation].explainer != "lime":
+            continue
+        _method = f"{_family}_{_segmentation}"
+        TOOL_CARDS[_method] = ToolCard(
+            method=_method, function_name=f"run_{_method}",
+            explainer=_family, segmentation=_segmentation,
+        )
 
 
 class ToolCatalog:

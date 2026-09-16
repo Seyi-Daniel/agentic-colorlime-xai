@@ -14,6 +14,9 @@ class ExperimentConfig:
 
     lime_num_samples: int = 500
     lime_batch_size: int = 32
+    lime_lasso_alpha: float = 0.001
+    shap_num_samples: int = 512
+    shap_max_segments: int = 256
     inference_batch_size: int = 16
     random_seed: int = 42
 
@@ -47,6 +50,8 @@ class ExperimentConfig:
         positive_ints = {
             "lime_num_samples": self.lime_num_samples,
             "lime_batch_size": self.lime_batch_size,
+            "shap_num_samples": self.shap_num_samples,
+            "shap_max_segments": self.shap_max_segments,
             "inference_batch_size": self.inference_batch_size,
             "slic_n_segments": self.slic_n_segments,
             "quickshift_kernel_size": self.quickshift_kernel_size,
@@ -66,6 +71,10 @@ class ExperimentConfig:
             raise ValueError("omission_rgb must contain three values between 0 and 255")
         if self.colorlime_tol <= 0:
             raise ValueError("colorlime_tol must be positive")
+        if self.shap_num_samples < 2:
+            raise ValueError("shap_num_samples must be at least 2")
+        if not 0 < self.lime_lasso_alpha < float("inf"):
+            raise ValueError("lime_lasso_alpha must be finite and positive")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

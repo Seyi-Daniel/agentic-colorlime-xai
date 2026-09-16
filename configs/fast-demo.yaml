@@ -9,6 +9,9 @@ application:
   output_root: outputs
 
 experiment:
+  shap_num_samples: 128
+  shap_max_segments: 256
+  lime_lasso_alpha: 0.001
   lime_num_samples: 100
   lime_batch_size: 20
   inference_batch_size: 16
