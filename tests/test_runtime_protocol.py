@@ -5,21 +5,14 @@ from types import SimpleNamespace
 import pytest
 
 from agentic_colorlime.config import ExperimentConfig
-
-# The protocol tests do not run LIME. Provide a tiny import stub so they remain
-# runnable in lightweight development environments where the optional runtime
-# dependency has not yet been installed.
-if "lime" not in sys.modules:
-    lime_stub = ModuleType("lime")
-    lime_stub.lime_image = ModuleType("lime.lime_image")
-    sys.modules["lime"] = lime_stub
-    sys.modules["lime.lime_image"] = lime_stub.lime_image
+from agentic_colorlime.tool_catalog import ToolCatalog
 
 from agentic_colorlime.runtime import ToolRuntime
 
 
 def test_source_inspection_returns_registered_code_and_active_config():
     runtime = SimpleNamespace(
+        catalog=ToolCatalog(),
         inspected_methods=set(),
         trace=[],
         config=ExperimentConfig(slic_n_segments=77),

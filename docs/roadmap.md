@@ -14,7 +14,7 @@
 - Measure explanation stability across seeds.
 - Compare the online agent with an exhaustive offline oracle.
 - Evaluate source inspection and visual grounding through ablations.
-- Add other XAI families through a common explanation interface.
+- Extend beyond the implemented LIME, sparse LIME (Lasso), and Kernel SHAP providers.
 
 ## Agent-controlled configuration
 
@@ -33,6 +33,6 @@ Implementation status: planned.
 ## Engineering maturity
 
 - Add typed XAI provider interfaces and isolate OpenAI-specific transport.
-- Add offline deterministic agent fixtures for full control-loop tests.
+- Extend the offline control-loop fixtures to more model and failure scenarios.
 - Introduce structured logging and resumable experiment manifests.
 - Add runtime cost and deployment documentation.

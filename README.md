@@ -1,12 +1,13 @@
 # Agentic Color-LIME XAI
 
 An explainable-AI research system that lets a code-grounded agent select and
-evaluate image-LIME segmentation methods, including **Color-LIME**, a weighted
-color-clustering alternative to conventional spatial superpixels.
+evaluate **LIME, sparse LIME (Lasso), and Kernel SHAP**, then choose a segmentation.
+It accepts one or multiple images, with independent agent decisions for each.
+**Color-LIME** supplies weighted color groups as an alternative to spatial superpixels.
 
 > **Status:** research prototype under active development.
 
-## Result at a glance
+## Historical LIME benchmark
 
 On 84 correctly classified ImageNet validation images, Color-LIME Black
 increased median Confidence Impact Ratio (CIR) and Decision Impact Ratio (DIR)
@@ -35,22 +36,24 @@ definitions, controls, limitations, and the perturbation-policy caveat.
 The agent receives a model prediction, cheap image statistics, registered local
 method identifiers, and evidence from methods it chooses to execute. It may
 inspect the actual registered source function before execution. Each candidate
-must pass through LIME, CIR calculation, and a separate evidence-review step
+must pass through the selected explainer, CIR calculation, and a separate evidence-review step
 before the agent can continue or finish.
 
 ```mermaid
 flowchart LR
-    A["Image + classifier"] --> B["Image profile"]
-    B --> C["Agent chooses or inspects a method"]
-    C --> D["Segmentation + LIME"]
+    A["Each image + shared classifier"] --> B["Image profile"]
+    B --> C["Agent chooses an explainer"]
+    C --> S["Agent chooses or inspects segmentation"]
+    S --> D["Run selected explainer"]
     D --> E["CIR / DIR evidence"]
     E --> F["Evidence and counterevidence review"]
     F -->|"uncertainty remains"| C
     F -->|"finish authorized"| G["Final explanation + stopping rationale"]
 ```
 
-Registered methods are SLIC, Quickshift, Felzenszwalb, compact Watershed, and
-Color-LIME. The runtime enforces sequential execution, CIR after every
+Registered segmentations are SLIC, Quickshift, Felzenszwalb, compact Watershed, and
+Color-LIME. All three explainers support these five segmentations. Each
+explainer/segmentation pair can be attempted once per image. The runtime enforces sequential execution, CIR after every
 candidate, review before stopping, and an explicit trade-off if the selected
 candidate does not have the highest observed CIR.
 
@@ -91,7 +94,20 @@ agentic-colorlime \
   --config configs/agent-demo.yaml
 ```
 
-Or launch the interface:
+To process several images (or repeat `--image`):
+
+```bash
+agentic-colorlime --image images/first.jpg images/second.jpg --config configs/agent-demo.yaml
+```
+
+A single path preserves the existing single-image output. Multiple paths create
+`batch_summary.json` and separate `image-0001`, `image-0002`, ... folders. Failed
+images are recorded and remaining images continue; the command exits with status
+1 if any image fails. The classifier is loaded once per batch. Processing is
+sequential, and each image has its own target class and agent conversation.
+
+The interface accepts multiple uploads or one local image path per line and
+lets you select a completed image to view its explanation. Launch it with:
 
 ```bash
 streamlit run app.py
@@ -119,6 +135,40 @@ python experiments/colorlime_benchmark.py \
   --num-samples 1000 \
   --k-colors 256
 ```
+
+## Explanation choices
+
+- **LIME:** the existing binary segment perturbations and weighted Ridge surrogate.
+- **Sparse LIME (`lime_lasso`):** the same sampling and masking, with a Lasso
+  surrogate (`lime_lasso_alpha`, default 0.001). This is a configured LIME variant,
+  not an implementation of LEMON. Its penalty may leave no positive regions.
+- **Kernel SHAP (`shap`):** treats each segment as present or hidden and explains
+  the original target-class probability against an all-hidden background. It
+  shares LIME's `hide_color` policy, including segment means when it is null.
+  SHAP does not universally require segmentation; this integration deliberately
+  uses it to make the image features comparable and keep classifier access model-agnostic.
+
+Kernel SHAP uses 512 requested coalition samples and a 256-segment limit by
+default. A finer segmentation fails that candidate with a recorded message so
+the agent can choose another. Override with `--shap-samples` and
+`--shap-max-segments`; increasing these settings increases computation. The
+explicit SHAP feature-selection setting is `num_features(10)` (or fewer if the
+image has fewer segments). Saved diagnostics include all signed weights, the
+background prediction, and the additivity residual. The residual is an accounting
+check, not a quality score. LIME variants retain their surrogate score separately.
+
+Set `--lime-lasso-alpha` to configure the sparse variant. These settings also work
+in the YAML `experiment` section and in the app. The agent chooses algorithms
+and segmentations; numeric settings remain user-controlled.
+
+The existing area-based positive-region selection and CIR omission test apply
+to every candidate. Whole segments may exceed the requested area, and CIR alone
+does not establish explanation faithfulness. Batch runs create separate evidence
+per image rather than a single explanation for the whole collection. More images
+and comparisons require more classifier computation and agent API calls.
+
+See [implementation details and references](docs/multi-explainer.md).
+The historical results above have **not** been re-evaluated for SHAP or sparse LIME.
 
 ## Current capabilities
 

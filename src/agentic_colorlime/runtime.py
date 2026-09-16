@@ -15,6 +15,7 @@ from .config import ExperimentConfig
 from .image_io import image_to_data_url
 from .image_profile import ImageProfile
 from .lime_engine import LimeResult, run_lime
+from .shap_engine import run_shap
 from .segmentations import SEGMENTATION_FUNCTIONS, SegmentationResult
 from .tool_catalog import ToolCatalog
 from .visualization import (
@@ -45,6 +46,8 @@ class Candidate:
         payload: dict[str, Any] = {
             "candidate_id": self.candidate_id,
             "method": self.method,
+            "explainer": self.lime.explainer,
+            "segmentation_method": self.segmentation.method,
             "selection_rationale": self.selection_rationale,
             "uncertainty_addressed": self.uncertainty_addressed,
             "expected_signal": self.expected_signal,
@@ -55,12 +58,16 @@ class Candidate:
             "positive_feature_count": int(len(self.lime.positive_features)),
             "selected_feature_count": int(len(self.lime.selected_features)),
             "critical_area_fraction": float(self.lime.actual_area_fraction),
-            "lime_local_surrogate_score": float(self.lime.surrogate_score),
+            "local_surrogate_score": self.lime.surrogate_score,
+            "explanation_diagnostics": self.lime.diagnostics,
             "segmentation_seconds": float(self.segmentation_seconds),
-            "lime_seconds": float(self.lime.lime_seconds),
+            "explanation_seconds": float(self.lime.lime_seconds),
             "total_seconds": float(self.segmentation_seconds + self.lime.lime_seconds),
             "artifacts": dict(self.artifacts),
         }
+        if self.lime.explainer in {"lime", "lime_lasso"}:
+            payload["lime_local_surrogate_score"] = self.lime.surrogate_score
+            payload["lime_seconds"] = float(self.lime.lime_seconds)
         if self.cir is not None:
             payload.update(
                 {
@@ -114,7 +121,7 @@ class ToolRuntime:
         self.catalog = catalog or ToolCatalog()
 
         registered_functions = set(SEGMENTATION_FUNCTIONS)
-        registered_cards = set(self.catalog.cards)
+        registered_cards = {card.segmentation_method for card in self.catalog.all_cards()}
 
         if not registered_functions:
             raise RuntimeError(
@@ -148,6 +155,7 @@ class ToolRuntime:
         self.inspected_methods: set[str] = set()
         self.finish_authorized = False
         self.last_evidence_review: dict[str, Any] | None = None
+        self.selected_explainer: str | None = None
 
         save_rgb(self.image, self.output_dir / "input_image.png")
 
@@ -161,7 +169,25 @@ class ToolRuntime:
 
     @property
     def available_methods(self) -> set[str]:
-        return set(SEGMENTATION_FUNCTIONS)
+        return set(self.catalog.cards)
+
+    def available_explainers(self) -> list[str]:
+        return sorted({self.catalog.get(m).explainer for m in self.unattempted_methods()})
+
+    def select_explainer(self, explainer: str, rationale: str) -> dict[str, Any]:
+        if self.pending_cir_candidate_id or self.pending_review_candidate_id:
+            raise RuntimeError("Complete the pending CIR and evidence review first.")
+        if self.selected_explainer is not None:
+            raise RuntimeError("Execute a segmentation for the selected explainer first.")
+        if explainer not in self.available_explainers():
+            raise ValueError(f"No unattempted candidates for explainer: {explainer}")
+        if not str(rationale).strip():
+            raise ValueError("An explainer selection rationale is required.")
+        self.selected_explainer = explainer
+        self.finish_authorized = False
+        result = {"explainer": explainer, "rationale": str(rationale).strip()}
+        self.trace.append({"event": "explainer_selection", "tool": "select_explainer", "result": result})
+        return result
 
     def attempted_methods(self) -> set[str]:
         return set(self.candidate_id_by_method) | set(self.failed_methods)
@@ -184,16 +210,19 @@ class ToolRuntime:
 
     def inspect_method_source(self, method: str) -> dict[str, Any]:
         """Return the exact registered wrapper source and active configuration."""
-        if method not in SEGMENTATION_FUNCTIONS:
+        if method not in self.catalog.cards:
             raise KeyError(f"Unknown method: {method}")
         if method in self.inspected_methods:
             raise RuntimeError(f"The source for {method} has already been inspected.")
 
-        function = SEGMENTATION_FUNCTIONS[method]
+        card = self.catalog.get(method)
+        function = SEGMENTATION_FUNCTIONS[card.segmentation_method]
         result = {
             "method": method,
             "registered_function": f"{function.__module__}.{function.__name__}",
             "source_code": inspect.getsource(function),
+            "explainer": card.explainer,
+            "explainer_source_code": inspect.getsource(run_shap if card.explainer == "shap" else run_lime),
             "active_experiment_config": self.config.to_dict(),
             "note": (
                 "This is the local executable wrapper registered for this run. "
@@ -218,6 +247,11 @@ class ToolRuntime:
         if method in self.candidate_id_by_method:
             return
         self.failed_methods[method] = str(error)
+        self.selected_explainer = None
+        # Re-review existing evidence if the final remaining attempt fails.
+        evaluated = self.evaluated_candidates()
+        if not self.unattempted_methods() and evaluated:
+            self.pending_review_candidate_id = evaluated[-1].candidate_id
         self.trace.append(
             {
                 "event": "explanation_tool_failure",
@@ -263,20 +297,26 @@ class ToolRuntime:
             raise RuntimeError("Calculate CIR for the pending candidate before running another explanation tool.")
         if self.pending_review_candidate_id is not None:
             raise RuntimeError("Review the pending candidate evidence before running another explanation tool.")
-        if method not in SEGMENTATION_FUNCTIONS:
+        if method not in self.catalog.cards:
             raise KeyError(f"Unknown method: {method}")
+        card = self.catalog.get(method)
+        if card.explainer != self.selected_explainer:
+            raise RuntimeError("Select the candidate's explainer before its segmentation.")
         if method in self.attempted_methods():
             raise RuntimeError(f"{method} has already been attempted; select a different method or finish.")
 
         started = time.perf_counter()
-        segmentation = SEGMENTATION_FUNCTIONS[method](self.image, self.config)
+        segmentation = SEGMENTATION_FUNCTIONS[card.segmentation_method](self.image, self.config)
         segmentation_seconds = time.perf_counter() - started
-        lime_result = run_lime(
+        engine = run_shap if card.explainer == "shap" else run_lime
+        engine_options = {} if card.explainer == "shap" else {"variant": card.explainer}
+        lime_result = engine(
             image=self.image,
             predictor=self.predictor,
             target_class_id=self.target_class_id,
             segments=segmentation.labels,
             config=self.config,
+            **engine_options,
         )
 
         candidate_id = f"{method}-{uuid.uuid4().hex[:8]}"
@@ -314,6 +354,7 @@ class ToolRuntime:
         self.candidates_by_id[candidate_id] = candidate
         self.candidate_id_by_method[method] = candidate_id
         self.pending_cir_candidate_id = candidate_id
+        self.selected_explainer = None
         self.finish_authorized = False
         self.last_evidence_review = None
 
@@ -524,6 +565,8 @@ class ToolRuntime:
                         "decision": "Inspected local source before choosing.",
                     }
                 )
+            elif event_type == "explainer_selection":
+                compact.update(event.get("result", {}))
             elif event_type == "explanation_tool":
                 result = event.get("result", {})
                 compact.update(
