@@ -7,6 +7,31 @@ It accepts one or multiple images, with independent agent decisions for each.
 
 > **Status:** research prototype under active development.
 
+## Read the application in one file
+
+[`agentic_xai_commented.py`](agentic_xai_commented.py) contains the complete current
+application as ordinary Python definitions, with a reading map, 12 numbered
+sections, and comments explaining functions, decisions, loops, and state changes.
+It includes the CLI, Streamlit interface, batch processing, classifier adapter,
+agent, LIME/Lasso-LIME/SHAP, all five segmentations, CIR, and saved evidence.
+
+Start with the execution map at the top. Follow Sections 02–04 for the overall
+flow, Section 06 for the agent loop, and Sections 07–10 for what each tool does.
+Section 12 explains where Python actually starts executing the application.
+
+After installing the dependencies described below, run either entry point:
+
+```bash
+python agentic_xai_commented.py --image images/first.jpg images/second.jpg
+python -m streamlit run agentic_xai_commented.py
+```
+
+The file also works when copied outside the checkout with dependencies installed:
+it imports no project modules and embeds the default settings. An optional
+`--config` accepts a YAML profile. It is an annotated snapshot of the current
+application; later modular changes need to be reflected in this file explicitly.
+Historical benchmark/subdivision scripts remain separate.
+
 ## Historical LIME benchmark
 
 On 84 correctly classified ImageNet validation images, Color-LIME Black
