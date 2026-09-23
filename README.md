@@ -7,6 +7,37 @@ It accepts one or multiple images, with independent agent decisions for each.
 
 > **Status:** research prototype under active development.
 
+## Run the single-file application without a GUI
+
+[`agentic_xai_headless.py`](agentic_xai_headless.py) is the fully commented,
+command-line-only implementation. It contains the classifier, agent, LIME,
+Lasso-LIME, Kernel SHAP, five segmentations, CIR, batch processing, and audit
+records. It has no Streamlit imports, widgets, browser launch, or session state.
+Its image operations save evidence to PNG files without opening a window.
+
+With dependencies installed (see the standalone install command at the top of
+the file), run one or more local images:
+
+```bash
+python agentic_xai_headless.py --image images/first.jpg --output-root outputs
+python agentic_xai_headless.py --image images/first.jpg images/second.jpg --output-root outputs
+```
+
+One image and several images use the same output layout. Progress goes to the
+terminal; the final JSON is printed to standard output. Each run saves:
+
+- `batch_report.md`: a readable overview linking to every completed image report.
+- `batch_summary.json`: all image statuses, results, and failures.
+- An `explanation.md` and `result.json` inside each successful image's run folder.
+- The input image, candidate evidence PNGs, measurements, decision timeline, and
+  full agent audit records.
+
+Failed images are recorded and later images continue. The command exits with
+status 1 if any image failed. The file can also be imported: `run_experiment`
+returns an `ExperimentResult`, and `run_batch` returns a `BatchResult` with
+successful results in `batch.results[index]`. Defaults are embedded; `--config`
+can load a YAML profile. API credentials come from environment variables or `.env`.
+
 ## Read the application in one file
 
 [`agentic_xai_commented.py`](agentic_xai_commented.py) contains the complete current
