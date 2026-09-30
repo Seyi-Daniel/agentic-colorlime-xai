@@ -7,6 +7,21 @@ It accepts one or multiple images, with independent agent decisions for each.
 
 > **Status:** research prototype under active development.
 
+## Start here: the LIME decision notebook
+
+[`notebooks/agentic_lime_decisions.ipynb`](notebooks/agentic_lime_decisions.ipynb)
+is the self-contained, cell-by-cell implementation on this branch. It includes
+all twelve core LIME decisions, five segmenters, one-action stepping, an automatic
+agent loop, multiple images, saved evidence, and batch DIR with coverage.
+
+- **See results immediately:** open the
+  [executed offline example](notebooks/agentic_lime_demo_executed.ipynb).
+- **Run it:** follow [the notebook setup guide](notebooks/README.md).
+- **Demo mode** runs actual LIME with a synthetic classifier and an explicitly
+  scripted controller. **Live mode** uses ViT and an OpenAI agent.
+- This notebook has no GUI application code or SHAP dependency. The earlier
+  application files below remain available as historical implementations.
+
 ## Run the single-file application without a GUI
 
 [`agentic_xai_headless.py`](agentic_xai_headless.py) is the fully commented,

@@ -17,6 +17,9 @@ dist/
 
 # Generated runs may contain input images, model evidence, and API audit data.
 /outputs/
+/notebooks/outputs/
+.ipynb_checkpoints/
+**/audit/
 **/llm_audit/
 
 # Large or restricted research artifacts are not source code.

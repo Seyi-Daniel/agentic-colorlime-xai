@@ -48,6 +48,16 @@ ui = [
   "pandas>=2.2",
   "streamlit>=1.36",
 ]
+notebook = [
+  "matplotlib>=3.8",
+  "pandas>=2.2",
+  "jsonschema>=4.20",
+  "ipykernel>=6",
+  "ipywidgets>=8",
+  "nbformat>=5.10",
+  "nbclient>=0.10",
+  "jupyterlab>=4",
+]
 test = [
   "pytest>=8.0",
   "ruff>=0.6",

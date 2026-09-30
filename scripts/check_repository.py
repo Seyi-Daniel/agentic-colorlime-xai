@@ -17,6 +17,7 @@ TEXT_SUFFIXES = {
     ".example",
     ".gitignore",
     ".json",
+    ".ipynb",
     ".md",
     ".py",
     ".toml",
