@@ -1,265 +1,109 @@
-# Agentic Color-LIME XAI
+# Agentic LIME notebook
 
-An explainable-AI research system that lets a code-grounded agent select and
-evaluate **LIME, sparse LIME (Lasso), and Kernel SHAP**, then choose a segmentation.
-It accepts one or multiple images, with independent agent decisions for each.
-**Color-LIME** supplies weighted color groups as an alternative to spatial superpixels.
+This branch contains exactly three files:
 
-> **Status:** research prototype under active development.
+- **[agentic_lime_decisions.ipynb](agentic_lime_decisions.ipynb)** — the complete, commented implementation and step-by-step runs.
+- **README.md** — setup and usage instructions.
+- **[environment.yml](environment.yml)** — the Conda environment for both demo and live runs.
 
-## Start here: the LIME decision notebook
+## Set up and open
 
-[`notebooks/agentic_lime_decisions.ipynb`](notebooks/agentic_lime_decisions.ipynb)
-is the self-contained, cell-by-cell implementation on this branch. It includes
-all twelve core LIME decisions, five segmenters, one-action stepping, an automatic
-agent loop, multiple images, saved evidence, and batch DIR with coverage.
-
-- **See results immediately:** open the
-  [executed offline example](notebooks/agentic_lime_demo_executed.ipynb).
-- **Run it:** follow [the notebook setup guide](notebooks/README.md).
-- **Demo mode** runs actual LIME with a synthetic classifier and an explicitly
-  scripted controller. **Live mode** uses ViT and an OpenAI agent.
-- This notebook has no GUI application code or SHAP dependency. The earlier
-  application files below remain available as historical implementations.
-
-## Run the single-file application without a GUI
-
-[`agentic_xai_headless.py`](agentic_xai_headless.py) is the fully commented,
-command-line-only implementation. It contains the classifier, agent, LIME,
-Lasso-LIME, Kernel SHAP, five segmentations, CIR, batch processing, and audit
-records. It has no Streamlit imports, widgets, browser launch, or session state.
-Its image operations save evidence to PNG files without opening a window.
-
-With dependencies installed (see the standalone install command at the top of
-the file), run one or more local images:
+With Conda installed, run these commands from this folder:
 
 ```bash
-python agentic_xai_headless.py --image images/first.jpg --output-root outputs
-python agentic_xai_headless.py --image images/first.jpg images/second.jpg --output-root outputs
+conda env create -f environment.yml
+conda activate agentic-lime-notebook
+python -m ipykernel install --user --name agentic-lime-notebook --display-name "Agentic LIME"
+jupyter lab agentic_lime_decisions.ipynb
 ```
 
-One image and several images use the same output layout. Progress goes to the
-terminal; the final JSON is printed to standard output. Each run saves:
+Select the **Agentic LIME** kernel and run cells from top to bottom. No other
+repository files or editable package installation are needed. The initial
+installation needs an internet connection.
 
-- `batch_report.md`: a readable overview linking to every completed image report.
-- `batch_summary.json`: all image statuses, results, and failures.
-- An `explanation.md` and `result.json` inside each successful image's run folder.
-- The input image, candidate evidence PNGs, measurements, decision timeline, and
-  full agent audit records.
+## Follow the flow
 
-Failed images are recorded and later images continue. The command exits with
-status 1 if any image failed. The file can also be imported: `run_experiment`
-returns an `ExperimentResult`, and `run_batch` returns a `BatchResult` with
-successful results in `batch.results[index]`. Defaults are embedded; `--config`
-can load a YAML profile. API credentials come from environment variables or `.env`.
+Sections 1–16 define the components. Sections 17–29 run them:
 
-## Read the application in one file
+1. Load images and the classifier; inspect the original prediction.
+2. Choose and lock the target class.
+3. Choose segmentation and its settings.
+4. Choose LIME settings and generate an explanation candidate.
+5. Measure its impact and review the evidence.
+6. Try another configuration or finish with a justified selection.
+7. Save the results and process remaining images; inspect the batch summary.
 
-[`agentic_xai_commented.py`](agentic_xai_commented.py) contains the complete current
-application as ordinary Python definitions, with a reading map, 12 numbered
-sections, and comments explaining functions, decisions, loops, and state changes.
-It includes the CLI, Streamlit interface, batch processing, classifier adapter,
-agent, LIME/Lasso-LIME/SHAP, all five segmentations, CIR, and saved evidence.
+Each `run_agent_step(session)` call advances one action. Re-running that cell
+advances again. `run_agent_to_completion(session)` finishes the current session
+within its limits. Re-running the session-creation cell starts a fresh run.
 
-Start with the execution map at the top. Follow Sections 02–04 for the overall
-flow, Section 06 for the agent loop, and Sections 07–10 for what each tool does.
-Section 12 explains where Python actually starts executing the application.
+## Demo and live modes
 
-After installing the dependencies described below, run either entry point:
+The default `MODE = "demo"` uses two generated images, a synthetic classifier,
+and a scripted controller with real LIME calculations. It needs no API key or
+model download after installation. Its outputs demonstrate the program flow.
 
-```bash
-python agentic_xai_commented.py --image images/first.jpg images/second.jpg
-python -m streamlit run agentic_xai_commented.py
+For the live language-model agent and pretrained ViT, set `OPENAI_API_KEY` in
+your environment before launching Jupyter (or in a local `.env`). In section 2:
+
+```python
+MODE = "live"
+IMAGE_PATHS = ["images/first.jpg", "images/second.jpg"]
+AGENT_MODEL = "gpt-5-mini"
 ```
 
-The file also works when copied outside the checkout with dependencies installed:
-it imports no project modules and embeds the default settings. An optional
-`--config` accepts a YAML profile. It is an annotated snapshot of the current
-application; later modular changes need to be reflected in this file explicitly.
-Historical benchmark/subdivision scripts remain separate.
+Supply your own image files; paths resolve from the notebook's working directory.
+Restart the kernel and run from the top. Live mode downloads the classifier if
+needed and makes paid OpenAI API calls. `SEND_VISUALS=False` sends settings,
+predictions and measurements; `True` also sends image evidence.
 
-## Historical LIME benchmark
+## Agent decisions and evaluation
 
-On 84 correctly classified ImageNet validation images, Color-LIME Black
-increased median Confidence Impact Ratio (CIR) and Decision Impact Ratio (DIR)
-relative to default LIME:
+The agent controls all A–L decision categories: target class, segmentation method
+and settings, perturbation count, hidden-region replacement, distance measure,
+locality width, weighting function, maximum fitted features, feature selection,
+surrogate model and regularization strength. Choices are validated and bounded.
+This is LIME only, with Ridge or Lasso as the surrogate inside LIME.
 
-| Method | Median CIR | DIR |
-|---|---:|---:|
-| Default LIME | 0.678 | 51/84 (60.7%) |
-| Color-LIME Black | **0.894** | **69/84 (82.1%)** |
+One target is locked per image. The agent can retry segmentation methods with
+different settings and compare candidates. The classifier, random seed, omission
+color and evaluation-area policy stay fixed. Budgets prevent unlimited runs;
+failed and inconclusive outcomes remain explicit.
 
-Color-LIME produced higher CIR on 57 of 84 paired images. It changed the model
-decision on 24 images where default LIME did not; the reverse occurred on 6.
-These values are recalculated from the committed CSV by
-[`scripts/analyze_benchmark.py`](scripts/analyze_benchmark.py).
+Candidate results include local fidelity (training weighted R²), feature counts,
+CIR, removed area and decision change. Training fidelity is not held-out
+validation, and CIR alone does not establish explanation correctness. Batch DIR
+uses the selected explanation from each completed image and reports its
+denominator and coverage.
 
-![Verified benchmark summary](assets/figures/benchmark_summary.png)
+## Saved results
 
-The comparison used `google/vit-base-patch16-224`, 1,000 LIME perturbations per
-method, weighted RGB K-means with `k=256`, and critical regions covering at
-least 20% of the image. Only correct predictions among the first 100 ImageNet
-validation examples were evaluated. See [methodology](docs/methodology.md) for
-definitions, controls, limitations, and the perturbation-policy caveat.
+Running the notebook creates `outputs/lime-notebook/` locally, containing reports,
+timelines, candidate images, arrays and batch summaries. Live runs also save
+request/response audit records. These are generated results, separate from the
+three source files on the branch. Keep API keys out of commits and clear private
+live outputs before sharing the notebook.
 
-## What the system does
+## License
 
-The agent receives a model prediction, cheap image statistics, registered local
-method identifiers, and evidence from methods it chooses to execute. It may
-inspect the actual registered source function before execution. Each candidate
-must pass through the selected explainer, CIR calculation, and a separate evidence-review step
-before the agent can continue or finish.
+MIT License
 
-```mermaid
-flowchart LR
-    A["Each image + shared classifier"] --> B["Image profile"]
-    B --> C["Agent chooses an explainer"]
-    C --> S["Agent chooses or inspects segmentation"]
-    S --> D["Run selected explainer"]
-    D --> E["CIR / DIR evidence"]
-    E --> F["Evidence and counterevidence review"]
-    F -->|"uncertainty remains"| C
-    F -->|"finish authorized"| G["Final explanation + stopping rationale"]
-```
+Copyright (c) 2026 Daniel Odun-Ayo
 
-Registered segmentations are SLIC, Quickshift, Felzenszwalb, compact Watershed, and
-Color-LIME. All three explainers support these five segmentations. Each
-explainer/segmentation pair can be attempted once per image. The runtime enforces sequential execution, CIR after every
-candidate, review before stopping, and an explicit trade-off if the selected
-candidate does not have the highest observed CIR.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-## Repository map
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-```text
-src/agentic_colorlime/       agent, runtime, methods, metrics, and model adapter
-configs/                     named benchmark and demo profiles
-experiments/                 reproducible benchmark and follow-up research scripts
-results/benchmark/           compact CSV evidence and verified derived metrics
-assets/figures/              charts regenerated from committed results
-tests/                       policy, metric, segmentation, and configuration tests
-docs/                        architecture, methodology, history, and roadmap
-```
-
-Generated runs, restricted dataset images, model weights, and API audit data
-are excluded from version control.
-
-## Quick start
-
-Python 3.11 is recommended.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[all]"
-cp .env.example .env
-```
-
-Add your own `OPENAI_API_KEY` to `.env`. For gated ImageNet access, accept the
-dataset conditions on Hugging Face and provide `HF_TOKEN` locally.
-
-Run the command-line agent:
-
-```bash
-agentic-colorlime \
-  --image /absolute/path/to/image.jpg \
-  --config configs/agent-demo.yaml
-```
-
-To process several images (or repeat `--image`):
-
-```bash
-agentic-colorlime --image images/first.jpg images/second.jpg --config configs/agent-demo.yaml
-```
-
-A single path preserves the existing single-image output. Multiple paths create
-`batch_summary.json` and separate `image-0001`, `image-0002`, ... folders. Failed
-images are recorded and remaining images continue; the command exits with status
-1 if any image fails. The classifier is loaded once per batch. Processing is
-sequential, and each image has its own target class and agent conversation.
-
-The interface accepts multiple uploads or one local image path per line and
-lets you select a completed image to view its explanation. Launch it with:
-
-```bash
-streamlit run app.py
-```
-
-The `fast-demo` profile is a reduced-cost smoke test. The `benchmark` profile
-records the reported evaluation settings; the dataset benchmark is run by the
-standalone experiment script rather than the interactive agent.
-
-## Reproduce the committed analysis
-
-This verification needs no model download or API key:
-
-```bash
-python scripts/analyze_benchmark.py --verify
-```
-
-The full benchmark is computationally expensive and requires gated ImageNet
-access:
-
-```bash
-python experiments/colorlime_benchmark.py --self-test
-python experiments/colorlime_benchmark.py \
-  --num-images 100 \
-  --num-samples 1000 \
-  --k-colors 256
-```
-
-## Explanation choices
-
-- **LIME:** the existing binary segment perturbations and weighted Ridge surrogate.
-- **Sparse LIME (`lime_lasso`):** the same sampling and masking, with a Lasso
-  surrogate (`lime_lasso_alpha`, default 0.001). This is a configured LIME variant,
-  not an implementation of LEMON. Its penalty may leave no positive regions.
-- **Kernel SHAP (`shap`):** treats each segment as present or hidden and explains
-  the original target-class probability against an all-hidden background. It
-  shares LIME's `hide_color` policy, including segment means when it is null.
-  SHAP does not universally require segmentation; this integration deliberately
-  uses it to make the image features comparable and keep classifier access model-agnostic.
-
-Kernel SHAP uses 512 requested coalition samples and a 256-segment limit by
-default. A finer segmentation fails that candidate with a recorded message so
-the agent can choose another. Override with `--shap-samples` and
-`--shap-max-segments`; increasing these settings increases computation. The
-explicit SHAP feature-selection setting is `num_features(10)` (or fewer if the
-image has fewer segments). Saved diagnostics include all signed weights, the
-background prediction, and the additivity residual. The residual is an accounting
-check, not a quality score. LIME variants retain their surrogate score separately.
-
-Set `--lime-lasso-alpha` to configure the sparse variant. These settings also work
-in the YAML `experiment` section and in the app. The agent chooses algorithms
-and segmentations; numeric settings remain user-controlled.
-
-The existing area-based positive-region selection and CIR omission test apply
-to every candidate. Whole segments may exceed the requested area, and CIR alone
-does not establish explanation faithfulness. Batch runs create separate evidence
-per image rather than a single explanation for the whole collection. More images
-and comparisons require more classifier computation and agent API calls.
-
-See [implementation details and references](docs/multi-explainer.md).
-The historical results above have **not** been re-evaluated for SHAP or sparse LIME.
-
-## Current capabilities
-
-The implemented agent **selects, executes, evaluates, and stops between XAI
-methods**. Experiment parameters are currently loaded from a named profile or
-set in the interface. Agent-controlled parameter configuration is future work.
-
-The benchmark is specific to one model and ImageNet evaluation slice. Subset
-selection, black deletion, off-state differences, sample size, and omission
-artifacts constrain how broadly the results generalize.
-
-## Documentation
-
-- [Architecture and control flow](docs/architecture.md)
-- [Benchmark methodology and limitations](docs/methodology.md)
-- [Research timeline](docs/research-history.md)
-- [Research and engineering roadmap](docs/roadmap.md)
-
-## Citation and license
-
-Citation metadata is available in [`CITATION.cff`](CITATION.cff). Code is
-released under the MIT License. ImageNet data and pretrained models retain their
-own terms and are not redistributed by this repository.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
