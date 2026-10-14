@@ -1,144 +1,209 @@
-# Agentic Color-LIME XAI
+# Agentic LIME notebook
 
-An explainable-AI research system that lets a code-grounded agent select and
-evaluate image-LIME segmentation methods, including **Color-LIME**, a weighted
-color-clustering alternative to conventional spatial superpixels.
+`main` contains exactly three files:
 
-> **Status:** research prototype under active development.
+- **[agentic_lime_decisions.ipynb](agentic_lime_decisions.ipynb)** — the complete, commented implementation and step-by-step runs.
+- **README.md** — setup and usage instructions.
+- **[environment.yml](environment.yml)** — the Conda environment for both demo and live runs.
 
-## Result at a glance
+## Set up and open
 
-On 84 correctly classified ImageNet validation images, Color-LIME Black
-increased median Confidence Impact Ratio (CIR) and Decision Impact Ratio (DIR)
-relative to default LIME:
-
-| Method | Median CIR | DIR |
-|---|---:|---:|
-| Default LIME | 0.678 | 51/84 (60.7%) |
-| Color-LIME Black | **0.894** | **69/84 (82.1%)** |
-
-Color-LIME produced higher CIR on 57 of 84 paired images. It changed the model
-decision on 24 images where default LIME did not; the reverse occurred on 6.
-These values are recalculated from the committed CSV by
-[`scripts/analyze_benchmark.py`](scripts/analyze_benchmark.py).
-
-![Verified benchmark summary](assets/figures/benchmark_summary.png)
-
-The comparison used `google/vit-base-patch16-224`, 1,000 LIME perturbations per
-method, weighted RGB K-means with `k=256`, and critical regions covering at
-least 20% of the image. Only correct predictions among the first 100 ImageNet
-validation examples were evaluated. See [methodology](docs/methodology.md) for
-definitions, controls, limitations, and the perturbation-policy caveat.
-
-## What the system does
-
-The agent receives a model prediction, cheap image statistics, registered local
-method identifiers, and evidence from methods it chooses to execute. It may
-inspect the actual registered source function before execution. Each candidate
-must pass through LIME, CIR calculation, and a separate evidence-review step
-before the agent can continue or finish.
-
-```mermaid
-flowchart LR
-    A["Image + classifier"] --> B["Image profile"]
-    B --> C["Agent chooses or inspects a method"]
-    C --> D["Segmentation + LIME"]
-    D --> E["CIR / DIR evidence"]
-    E --> F["Evidence and counterevidence review"]
-    F -->|"uncertainty remains"| C
-    F -->|"finish authorized"| G["Final explanation + stopping rationale"]
-```
-
-Registered methods are SLIC, Quickshift, Felzenszwalb, compact Watershed, and
-Color-LIME. The runtime enforces sequential execution, CIR after every
-candidate, review before stopping, and an explicit trade-off if the selected
-candidate does not have the highest observed CIR.
-
-## Repository map
-
-```text
-src/agentic_colorlime/       agent, runtime, methods, metrics, and model adapter
-configs/                     named benchmark and demo profiles
-experiments/                 reproducible benchmark and follow-up research scripts
-results/benchmark/           compact CSV evidence and verified derived metrics
-assets/figures/              charts regenerated from committed results
-tests/                       policy, metric, segmentation, and configuration tests
-docs/                        architecture, methodology, history, and roadmap
-```
-
-Generated runs, restricted dataset images, model weights, and API audit data
-are excluded from version control.
-
-## Quick start
-
-Python 3.11 is recommended.
+With Conda installed, run these commands from this folder:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[all]"
-cp .env.example .env
+conda env create -f environment.yml
+conda activate agentic-lime-notebook
+python -m ipykernel install --user --name agentic-lime-notebook --display-name "Agentic LIME"
+jupyter lab agentic_lime_decisions.ipynb
 ```
 
-Add your own `OPENAI_API_KEY` to `.env`. For gated ImageNet access, accept the
-dataset conditions on Hugging Face and provide `HF_TOKEN` locally.
-
-Run the command-line agent:
+If the environment already exists, update it instead of recreating it:
 
 ```bash
-agentic-colorlime \
-  --image /absolute/path/to/image.jpg \
-  --config configs/agent-demo.yaml
+conda env update -f environment.yml
+conda activate agentic-lime-notebook
 ```
 
-Or launch the interface:
+Select the **Agentic LIME** kernel. Run the first code cell under **1. Environment
+and one-time Git setup**, then continue from top to bottom. No other repository
+files or editable package installation are needed. The initial installation
+needs an internet connection.
+
+## Clean notebook commits: run setup once per clone
+
+The first code cell installs local Git settings using `nbstripout` and `nbdime`.
+It creates a small cleaning script and attributes inside `.git`, so GitHub still
+contains only the three files above. It is safe to run again. Re-run it if you
+move the clone, recreate the environment, or select a different Python interpreter.
+
+When you stage the notebook with Git:
+
+- Outputs and execution counts are removed from the **staged copy**.
+- Notebook and cell metadata are replaced with fixed minimal Python kernel
+  metadata; editor settings, timestamps, widget state and tags are not committed.
+- Cell IDs are normalized to their positions, avoiding random-ID changes.
+- Code, Markdown, cell order and Markdown attachments remain tracked.
+- Your working notebook keeps its outputs and local metadata.
+
+The filter is required: if its environment or cleaning script is unavailable,
+Git reports an error instead of silently staging an unclean notebook. Select the
+correct kernel and re-run setup to repair it. Local exclusions cover generated
+outputs, input images, notebook checkpoints and `.env` files.
+
+`nbdime` provides cell-aware **local** diffs and merges. GitHub uses its own
+notebook viewer; nbdime does not replace that viewer. A raw JSON diff can still
+show cell-structure changes when you add, remove or move cells. This workflow
+keeps meaningful notebook changes, including Markdown, rather than Python only.
+
+**Every collaborator must run the setup cell in their own clone.** These settings
+are local and do not travel with a clone. Editing/uploading a notebook directly
+on GitHub bypasses the filter. This three-file layout has no server-side check
+that can enforce cleaning for collaborators who skip setup.
+
+Jupytext is not needed for this workflow: the `.ipynb` remains the single source
+of truth, without a second `.py` file to synchronize. See the official
+[nbstripout documentation](https://github.com/kynan/nbstripout) and
+[nbdime Git integration guide](https://nbdime.readthedocs.io/en/stable/vcs.html).
+
+## Two-minute check
+
+Start from a clean checkout of the updated `main`, with no unrelated staged
+changes. Run the setup cell, then run any existing demo cell and save the notebook
+without editing its source. From the repository folder:
 
 ```bash
-streamlit run app.py
+git check-attr filter diff merge -- agentic_lime_decisions.ipynb
+git add agentic_lime_decisions.ipynb
+git diff --cached --no-ext-diff --no-textconv -- agentic_lime_decisions.ipynb
 ```
 
-The `fast-demo` profile is a reduced-cost smoke test. The `benchmark` profile
-records the reported evaluation settings; the dataset benchmark is run by the
-standalone experiment script rather than the interactive agent.
+The attributes should report `nbstripout`, `jupyternotebook`, `jupyternotebook`.
+The diff should be empty even though you can still see outputs in Jupyter.
 
-## Reproduce the committed analysis
+Next, add a Python comment inside an existing code cell, save, and repeat the last
+two commands. The comment should appear in the diff; outputs and execution counts
+should not. Remove the test comment, save and stage again to return to an empty
+diff. No commit is needed for this check.
 
-This verification needs no model download or API key:
+For an exact check of the staged data (not the working notebook):
 
 ```bash
-python scripts/analyze_benchmark.py --verify
+git show :agentic_lime_decisions.ipynb | python -c 'import json,sys; n=json.load(sys.stdin); assert all(c.get("outputs", []) == [] and c.get("execution_count") is None and c["metadata"] == {} for c in n["cells"]); assert n["metadata"] == {"kernelspec": {"display_name": "Python 3 (ipykernel)", "language": "python", "name": "python3"}, "language_info": {"name": "python"}}; print("PASS: staged notebook is clean")'
 ```
 
-The full benchmark is computationally expensive and requires gated ImageNet
-access:
+`nbstripout --verify` on the working notebook can report outputs because keeping
+local outputs is intentional. The staged-data check above is the relevant check.
+
+## Everyday collaboration
+
+After updating `main`, create a branch for your notebook changes:
 
 ```bash
-python experiments/colorlime_benchmark.py --self-test
-python experiments/colorlime_benchmark.py \
-  --num-images 100 \
-  --num-samples 1000 \
-  --k-colors 256
+git switch main
+git pull --ff-only
+git switch -c my-lime-change
 ```
 
-## Current capabilities
+Edit and run cells as usual. Save the notebook, then:
 
-The implemented agent **selects, executes, evaluates, and stops between XAI
-methods**. Experiment parameters are currently loaded from a named profile or
-set in the interface. Agent-controlled parameter configuration is future work.
+```bash
+git add agentic_lime_decisions.ipynb
+git diff --cached -- agentic_lime_decisions.ipynb
+git commit -m "Describe the LIME change"
+git push -u origin my-lime-change
+```
 
-The benchmark is specific to one model and ImageNet evaluation slice. Subset
-selection, black deletion, off-state differences, sample size, and omission
-artifacts constrain how broadly the results generalize.
+Open a pull request into `main` on GitHub. Stage README/environment changes
+explicitly when needed. If you already have uncommitted work, save it on your
+working branch before switching branches.
 
-## Documentation
+The pre-notebook `main` is preserved on
+[`archive/main-before-notebook-2026-10-13`](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive/main-before-notebook-2026-10-13).
+The earlier notebook branch remains available too.
 
-- [Architecture and control flow](docs/architecture.md)
-- [Benchmark methodology and limitations](docs/methodology.md)
-- [Research timeline](docs/research-history.md)
-- [Research and engineering roadmap](docs/roadmap.md)
+## Follow the flow
 
-## Citation and license
+Sections 1–16 define the components. Sections 17–29 run them:
 
-Citation metadata is available in [`CITATION.cff`](CITATION.cff). Code is
-released under the MIT License. ImageNet data and pretrained models retain their
-own terms and are not redistributed by this repository.
+1. Load images and the classifier; inspect the original prediction.
+2. Choose and lock the target class.
+3. Choose segmentation and its settings.
+4. Choose LIME settings and generate an explanation candidate.
+5. Measure its impact and review the evidence.
+6. Try another configuration or finish with a justified selection.
+7. Save the results and process remaining images; inspect the batch summary.
+
+Each `run_agent_step(session)` call advances one action. Re-running that cell
+advances again. `run_agent_to_completion(session)` finishes the current session
+within its limits. Re-running the session-creation cell starts a fresh run.
+
+## Demo and live modes
+
+The default `MODE = "demo"` uses two generated images, a synthetic classifier,
+and a scripted controller with real LIME calculations. It needs no API key or
+model download after installation. Its outputs demonstrate the program flow.
+
+For the live language-model agent and pretrained ViT, set `OPENAI_API_KEY` in
+your environment before launching Jupyter (or in a local `.env`). In section 2:
+
+```python
+MODE = "live"
+IMAGE_PATHS = ["images/first.jpg", "images/second.jpg"]
+AGENT_MODEL = "gpt-5-mini"
+```
+
+Supply your own image files; paths resolve from the notebook's working directory.
+Restart the kernel and run from the top. Live mode downloads the classifier if
+needed and makes paid OpenAI API calls. `SEND_VISUALS=False` sends settings,
+predictions and measurements; `True` also sends image evidence.
+
+## Agent decisions and evaluation
+
+The agent controls all A–L decision categories: target class, segmentation method
+and settings, perturbation count, hidden-region replacement, distance measure,
+locality width, weighting function, maximum fitted features, feature selection,
+surrogate model and regularization strength. Choices are validated and bounded.
+This is LIME only, with Ridge or Lasso as the surrogate inside LIME.
+
+One target is locked per image. The agent can retry segmentation methods with
+different settings and compare candidates. The classifier, random seed, omission
+color and evaluation-area policy stay fixed. Budgets prevent unlimited runs;
+failed and inconclusive outcomes remain explicit.
+
+Candidate results include local fidelity (training weighted R²), feature counts,
+CIR, removed area and decision change. Training fidelity is not held-out
+validation, and CIR alone does not establish explanation correctness. Batch DIR
+uses the selected explanation from each completed image and reports its
+denominator and coverage.
+
+## Saved results
+
+Running the notebook creates `outputs/lime-notebook/` locally, containing reports,
+timelines, candidate images, arrays and batch summaries. Live runs also save
+request/response audit records. These are generated results, separate from the
+three source files on the branch. Keep API keys out of commits and clear private
+live outputs before sharing the notebook.
+
+## License
+
+MIT License
+
+Copyright (c) 2026 Daniel Odun-Ayo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
