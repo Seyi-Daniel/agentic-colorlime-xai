@@ -1,14 +1,14 @@
 # Agentic LIME notebook
 
-`main` contains exactly three files:
+This project has three source files:
 
-- **[agentic_lime_decisions.ipynb](agentic_lime_decisions.ipynb)** — the complete, commented implementation and step-by-step runs.
-- **README.md** — setup and usage instructions.
-- **[environment.yml](environment.yml)** — the Conda environment for both demo and live runs.
+- **[agentic_lime_decisions.ipynb](agentic_lime_decisions.ipynb)** — all implementation code and the sequential walkthrough.
+- **README.md** — installation, usage, and collaboration instructions.
+- **[environment.yml](environment.yml)** — the Conda environment, including the notebook and collaboration tools.
 
-## Set up and open
+## 1. Install with Conda
 
-With Conda installed, run these commands from this folder:
+Install Git and Conda first. Open a terminal in this repository's folder and run:
 
 ```bash
 conda env create -f environment.yml
@@ -17,86 +17,84 @@ python -m ipykernel install --user --name agentic-lime-notebook --display-name "
 jupyter lab agentic_lime_decisions.ipynb
 ```
 
-If the environment already exists, update it instead of recreating it:
+Conda creates the environment and installs all listed packages. The `pip:` section
+inside `environment.yml` is processed automatically inside that Conda environment;
+there is no separate requirements file or manual package-by-package installation.
+The initial installation needs internet access.
+
+If the environment already exists, replace the first command with:
 
 ```bash
-conda env update -f environment.yml
-conda activate agentic-lime-notebook
+conda env update -n agentic-lime-notebook -f environment.yml
 ```
 
-Select the **Agentic LIME** kernel. Run the first code cell under **1. Environment
-and one-time Git setup**, then continue from top to bottom. No other repository
-files or editable package installation are needed. The initial installation
-needs an internet connection.
+`jupyter lab ...` opens the notebook for editing. You can also open it in another
+notebook editor. Select the **Agentic LIME** kernel in either case.
 
-## Clean notebook commits: run setup once per clone
+## 2. Run the notebook's setup cell once
 
-The first code cell installs local Git settings using `nbstripout` and `nbdime`.
-It creates a small cleaning script and attributes inside `.git`, so GitHub still
-contains only the three files above. It is safe to run again. Re-run it if you
-move the clone, recreate the environment, or select a different Python interpreter.
+Run the first code cell under **1. Environment and one-time Git setup**. It
+configures Git for this clone using the Python environment selected as the kernel.
+It is safe to run again. Then continue through the notebook from top to bottom.
 
-When you stage the notebook with Git:
+This setup cell uses two tools already listed in the Conda environment:
 
-- Outputs and execution counts are removed from the **staged copy**.
-- Notebook and cell metadata are replaced with fixed minimal Python kernel
-  metadata; editor settings, timestamps, widget state and tags are not committed.
-- Cell IDs are normalized to their positions, avoiding random-ID changes.
-- Code, Markdown, cell order and Markdown attachments remain tracked.
-- Your working notebook keeps its outputs and local metadata.
+- **nbstripout** removes execution clutter from the copy that Git stages for a commit.
+- **nbdime** makes local notebook diffs and merges aware of cells and their source.
 
-The filter is required: if its environment or cleaning script is unavailable,
-Git reports an error instead of silently staging an unclean notebook. Select the
-correct kernel and re-run setup to repair it. Local exclusions cover generated
-outputs, input images, notebook checkpoints and `.env` files.
+All generated Git settings and the cleaning helper live inside the clone's hidden
+`.git` folder. They do not add source files or change global Git settings.
+Re-run the cell if you move the clone or recreate/change its Python environment.
+The configured environment must remain installed for Git to use these tools.
 
-`nbdime` provides cell-aware **local** diffs and merges. GitHub uses its own
-notebook viewer; nbdime does not replace that viewer. A raw JSON diff can still
-show cell-structure changes when you add, remove or move cells. This workflow
-keeps meaningful notebook changes, including Markdown, rather than Python only.
+When you run cells and save, your local outputs and charts remain visible. When
+you run `git add`, Git prepares a cleaned copy for committing:
 
-**Every collaborator must run the setup cell in their own clone.** These settings
-are local and do not travel with a clone. Editing/uploading a notebook directly
-on GitHub bypasses the filter. This three-file layout has no server-side check
-that can enforce cleaning for collaborators who skip setup.
+- Code, Markdown, cell order, and embedded Markdown attachments are preserved.
+- Outputs and execution counts are removed.
+- Editor metadata, timestamps, widget state, and cell tags are removed; fixed minimal Python kernel metadata remains.
+- Random cell IDs are replaced with positional IDs. Inserting or moving cells can still change these IDs.
 
-Jupytext is not needed for this workflow: the `.ipynb` remains the single source
-of truth, without a second `.py` file to synchronize. See the official
-[nbstripout documentation](https://github.com/kynan/nbstripout) and
-[nbdime Git integration guide](https://nbdime.readthedocs.io/en/stable/vcs.html).
+GitHub receives that cleaned notebook, so execution clutter does not obscure code
+changes. Committed notebooks do not include generated outputs or charts. GitHub
+uses its own notebook viewer; nbdime improves comparisons on your computer.
+For a local visual conflict resolver, use `git mergetool --tool=nbdime`, inspect the
+resolved cells, and stage the result.
 
-## Two-minute check
+**Each collaborator must run the setup cell in their own clone.** This three-file
+layout has no pre-commit hook or GitHub check. Skipping setup, uploading notebooks,
+or editing directly in GitHub can bypass cleanup. If Git reports that its required
+filter is unavailable, activate the correct environment and re-run the setup cell.
 
-Start from a clean checkout of the updated `main`, with no unrelated staged
-changes. Run the setup cell, then run any existing demo cell and save the notebook
-without editing its source. From the repository folder:
+Local Git exclusions cover generated outputs, input images, checkpoints, and `.env`
+files. These exclusions do not remove files that are already tracked. The notebook
+remains the single implementation file; no paired Python source file is required.
+
+## 3. Check that cleanup works
+
+Start from a clean checkout after setup, with no unrelated staged changes.
+Run the setup cell or an existing demo cell, then save without editing its source.
+From the repository folder, run:
 
 ```bash
-git check-attr filter diff merge -- agentic_lime_decisions.ipynb
 git add agentic_lime_decisions.ipynb
-git diff --cached --no-ext-diff --no-textconv -- agentic_lime_decisions.ipynb
+git diff --cached
 ```
 
-The attributes should report `nbstripout`, `jupyternotebook`, `jupyternotebook`.
-The diff should be empty even though you can still see outputs in Jupyter.
+**Expected: no differences**, while your outputs remain visible in the editor.
 
-Next, add a Python comment inside an existing code cell, save, and repeat the last
-two commands. The comment should appear in the diff; outputs and execution counts
-should not. Remove the test comment, save and stage again to return to an empty
-diff. No commit is needed for this check.
+Next, add a comment such as `# Collaboration test` inside an existing code cell,
+save, and repeat those commands. **Expected: the added comment appears without
+execution clutter.** Remove the comment, save, and stage again to return to an
+empty diff. No commit is needed for this test.
 
-For an exact check of the staged data (not the working notebook):
+This test assumes the setup changes themselves are already in your starting
+commit. If you are reviewing a new setup version, its intentional source changes
+will also appear until that version is committed.
 
-```bash
-git show :agentic_lime_decisions.ipynb | python -c 'import json,sys; n=json.load(sys.stdin); assert all(c.get("outputs", []) == [] and c.get("execution_count") is None and c["metadata"] == {} for c in n["cells"]); assert n["metadata"] == {"kernelspec": {"display_name": "Python 3 (ipykernel)", "language": "python", "name": "python3"}, "language_info": {"name": "python"}}; print("PASS: staged notebook is clean")'
-```
+## 4. Collaborate normally
 
-`nbstripout --verify` on the working notebook can report outputs because keeping
-local outputs is intentional. The staged-data check above is the relevant check.
-
-## Everyday collaboration
-
-After updating `main`, create a branch for your notebook changes:
+Start with a clean working tree, update `main`, and create a branch:
 
 ```bash
 git switch main
@@ -104,22 +102,21 @@ git pull --ff-only
 git switch -c my-lime-change
 ```
 
-Edit and run cells as usual. Save the notebook, then:
+Edit, run, and save your notebook as usual. Then review and publish your change:
 
 ```bash
 git add agentic_lime_decisions.ipynb
-git diff --cached -- agentic_lime_decisions.ipynb
+git diff --cached
 git commit -m "Describe the LIME change"
 git push -u origin my-lime-change
 ```
 
-Open a pull request into `main` on GitHub. Stage README/environment changes
-explicitly when needed. If you already have uncommitted work, save it on your
-working branch before switching branches.
+Open a pull request into `main` on GitHub. Stage README or environment changes
+explicitly when needed. Keep changes small and coordinate edits to the same cells.
+Save uncommitted work on your working branch before switching branches.
 
-The pre-notebook `main` is preserved on
-[`archive/main-before-notebook-2026-10-13`](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive/main-before-notebook-2026-10-13).
-The earlier notebook branch remains available too.
+Official tool references: [nbstripout](https://github.com/kynan/nbstripout) and
+[nbdime Git integration](https://nbdime.readthedocs.io/en/stable/vcs.html).
 
 ## Follow the flow
 
@@ -181,7 +178,7 @@ denominator and coverage.
 Running the notebook creates `outputs/lime-notebook/` locally, containing reports,
 timelines, candidate images, arrays and batch summaries. Live runs also save
 request/response audit records. These are generated results, separate from the
-three source files on the branch. Keep API keys out of commits and clear private
+source files on the branch. Keep API keys out of commits and clear private
 live outputs before sharing the notebook.
 
 ## License
