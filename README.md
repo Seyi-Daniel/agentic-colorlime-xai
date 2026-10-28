@@ -1,122 +1,173 @@
-# Agentic LIME notebook
+# Agentic LIME: notebook editing, readable GitHub changes
 
-This project has three source files:
+Work in a Jupyter notebook in VS Code. Commit its Jupytext Python representation
+so GitHub shows code and Markdown changes rather than notebook JSON.
 
-- **[agentic_lime_decisions.ipynb](agentic_lime_decisions.ipynb)** — all implementation code and the sequential walkthrough.
-- **README.md** — installation, usage, and collaboration instructions.
-- **[environment.yml](environment.yml)** — the Conda environment, including the notebook and collaboration tools.
+**The implementation remains one sequential document.** `# %%` markers preserve
+code cells; `# %% [markdown]` markers preserve headings and explanations. Everyone
+can reconstruct the notebook from the same tracked source.
 
-## 1. Install with Conda
+## Files on this branch
 
-Install Git and Conda first. Open a terminal in this repository's folder and run:
+- **[agentic_lime_decisions.py](agentic_lime_decisions.py)** — the complete notebook source tracked by Git.
+- **README.md** — setup and collaboration instructions.
+- **[environment.yml](environment.yml)** — the Conda environment and Python packages.
+- **[jupytext.toml](jupytext.toml)** — pairing and metadata policy shared by collaborators.
+- **.gitignore** — excludes local notebooks, outputs, images, and private `.env` files.
+- **.vscode/extensions.json** — recommends the Python, Jupyter, and Jupytext Sync extensions.
+
+`agentic_lime_decisions.ipynb` is generated locally and is not tracked on this
+branch. The previous notebook-only workflow remains on
+[`codex/notebook-collaboration`](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/codex/notebook-collaboration).
+Your existing test-print cell is preserved in the Python source.
+
+## 1. Clone and install with Conda
+
+Use a new folder to try this branch:
 
 ```bash
+git clone --branch codex/jupytext-notebook-workflow https://github.com/Seyi-Daniel/agentic-colorlime-xai.git agentic-lime-jupytext
+cd agentic-lime-jupytext
 conda env create -f environment.yml
 conda activate agentic-lime-notebook
-python -m ipykernel install --user --name agentic-lime-notebook --display-name "Agentic LIME"
-jupyter lab agentic_lime_decisions.ipynb
 ```
 
-Conda creates the environment and installs all listed packages. The `pip:` section
-inside `environment.yml` is processed automatically inside that Conda environment;
-there is no separate requirements file or manual package-by-package installation.
-The initial installation needs internet access.
-
-If the environment already exists, replace the first command with:
+If that Conda environment already exists, replace the create command with:
 
 ```bash
 conda env update -n agentic-lime-notebook -f environment.yml
 ```
 
-`jupyter lab ...` opens the notebook for editing. You can also open it in another
-notebook editor. Select the **Agentic LIME** kernel in either case.
+Conda automatically processes the environment file's `pip:` section. There is no
+separate requirements file or virtual-environment setup. Git and Conda must be
+installed first, and package installation needs an internet connection.
 
-## 2. Run the notebook's setup cell once
+## 2. Reconstruct and open your notebook in VS Code
 
-Run the first code cell under **1. Environment and one-time Git setup**. It
-configures Git for this clone using the Python environment selected as the kernel.
-It is safe to run again. Then continue through the notebook from top to bottom.
-
-This setup cell uses two tools already listed in the Conda environment:
-
-- **nbstripout** removes execution clutter from the copy that Git stages for a commit.
-- **nbdime** makes local notebook diffs and merges aware of cells and their source.
-
-All generated Git settings and the cleaning helper live inside the clone's hidden
-`.git` folder. They do not add source files or change global Git settings.
-Re-run the cell if you move the clone or recreate/change its Python environment.
-The configured environment must remain installed for Git to use these tools.
-
-When you run cells and save, your local outputs and charts remain visible. When
-you run `git add`, Git prepares a cleaned copy for committing:
-
-- Code, Markdown, cell order, and embedded Markdown attachments are preserved.
-- Outputs and execution counts are removed.
-- Editor metadata, timestamps, widget state, and cell tags are removed; fixed minimal Python kernel metadata remains.
-- Random cell IDs are replaced with positional IDs. Inserting or moving cells can still change these IDs.
-
-GitHub receives that cleaned notebook, so execution clutter does not obscure code
-changes. Committed notebooks do not include generated outputs or charts. GitHub
-uses its own notebook viewer; nbdime improves comparisons on your computer.
-For a local visual conflict resolver, use `git mergetool --tool=nbdime`, inspect the
-resolved cells, and stage the result.
-
-**Each collaborator must run the setup cell in their own clone.** This three-file
-layout has no pre-commit hook or GitHub check. Skipping setup, uploading notebooks,
-or editing directly in GitHub can bypass cleanup. If Git reports that its required
-filter is unavailable, activate the correct environment and re-run the setup cell.
-
-Local Git exclusions cover generated outputs, input images, checkpoints, and `.env`
-files. These exclusions do not remove files that are already tracked. The notebook
-remains the single implementation file; no paired Python source file is required.
-
-## 3. Check that cleanup works
-
-Start from a clean checkout after setup, with no unrelated staged changes.
-Run the setup cell or an existing demo cell, then save without editing its source.
-From the repository folder, run:
+From this repository folder, with the Conda environment active:
 
 ```bash
-git add agentic_lime_decisions.ipynb
-git diff --cached
+jupytext --sync agentic_lime_decisions.py
 ```
 
-**Expected: no differences**, while your outputs remain visible in the editor.
+This creates `agentic_lime_decisions.ipynb` with the same code, Markdown, and cell
+order. It does not execute any cells. Outputs appear when you run the notebook.
+You can regenerate the notebook from a fresh clone whenever needed.
 
-Next, add a comment such as `# Collaboration test` inside an existing code cell,
-save, and repeat those commands. **Expected: the added comment appears without
-execution clutter.** Remove the comment, save, and stage again to return to an
-empty diff. No commit is needed for this test.
+Open this folder in VS Code. Install the recommended extensions:
 
-This test assumes the setup changes themselves are already in your starting
-commit. If you are reviewing a new setup version, its intentional source changes
-will also appear until that version is committed.
+1. **Python** by Microsoft (`ms-python.python`).
+2. **Jupyter** by Microsoft (`ms-toolsai.jupyter`).
+3. **Jupytext Sync** by Victor Negirneac (`caenrigen.jupytext-sync`).
 
-## 4. Collaborate normally
+Use **Python: Select Interpreter** to select the `agentic-lime-notebook` Conda
+environment; this lets Jupytext Sync find the installed Jupytext package. Open
+`agentic_lime_decisions.ipynb` and select that environment as the notebook kernel
+as well. These are separate selections in VS Code.
 
-Start with a clean working tree, update `main`, and create a branch:
+Keep both the `.ipynb` and `.py` files open in tabs. Edit the `.ipynb` normally.
+Jupytext Sync updates the paired source when you save. Wait for synchronization
+before staging. **Installing the Python package alone does not enable automatic
+syncing in VS Code.** If the extension cannot find Jupytext, run **Jupytext: Locate
+Python and Jupytext** or **Jupytext: Show Logs** from the Command Palette and check
+that it is using the Conda environment.
+
+You do not need `jupyter lab`, a registered named kernel, or the old Git-cleaning
+setup cell for this VS Code workflow.
+
+## 3. Edit, review, commit, and push
+
+Run cells, inspect results, edit code or Markdown, and save as usual. Before each
+commit, use the terminal in the repository folder to ensure synchronization:
 
 ```bash
-git switch main
+conda activate agentic-lime-notebook
+jupytext --sync agentic_lime_decisions.ipynb
+git diff -- agentic_lime_decisions.py
+git add agentic_lime_decisions.py
+git diff --cached
+git commit -m "Describe the notebook change"
+git push
+```
+
+The explicit sync is also the fallback if you do not install the VS Code sync
+extension. Commit the `.py` source, not the `.ipynb`. Stage README/environment/
+configuration edits explicitly when needed. The initial clone already tracks the
+remote test branch, so `git push` updates it. For a new feature branch, create it
+with `git switch -c my-lime-change` and publish it with
+`git push -u origin my-lime-change`; then open a pull request.
+
+**Expected:** running cells, changing kernels, and saving outputs causes no Python
+source diff. Changing a Python line or Markdown text changes that line in GitHub.
+Adding a cell adds a `# %%` boundary plus its source, without notebook JSON.
+
+## 4. Receive a collaborator's changes
+
+Save, synchronize, and commit your own source changes first. Close the notebook
+editor before pulling, so an old in-memory notebook cannot overwrite newer source.
+Then run:
+
+```bash
 git pull --ff-only
-git switch -c my-lime-change
+jupytext --sync agentic_lime_decisions.py
 ```
 
-Edit, run, and save your notebook as usual. Then review and publish your change:
+Reopen the notebook in VS Code. The collaborator's code and cell structure are now
+present. The sync can retain local outputs for unchanged cells, but those outputs
+are not evidence that the new source has run. Restart the kernel and rerun the
+relevant cells (or run from the top) to refresh your results.
+
+If you and a collaborator edited the same source lines, resolve the conflict in
+`.py` like an ordinary Python file, then sync and reopen the notebook. If Jupytext
+reports conflicting edits to both local representations, preserve both versions
+and reconcile their source before syncing; do not force an overwrite blindly.
+
+## 5. Small collaboration test
+
+From a fresh clone after initial synchronization:
+
+1. Run the first code cell and save. Sync the notebook with the command above.
+   `git diff -- agentic_lime_decisions.py` should be empty.
+2. Add `# Collaboration test` inside an existing code cell, save, and sync.
+   The Python diff should show only that comment. Commit and push it.
+3. In a second clone, create the local notebook with `jupytext --sync
+   agentic_lime_decisions.py`. The comment should appear in the reconstructed cell.
+4. Edit a different cell in the second notebook, sync, commit, and push. In the
+   first clone, close the notebook and follow the pull/sync steps above.
+
+No notebook execution counts, editor metadata, or outputs belong in those commits.
+The ignored `.ipynb` can still be marked modified by the editor because it holds
+local results; Git Source Control should show the shared `.py` source edits.
+
+## Other ways to use the same source
+
+The `# %%` cells can also run individually in VS Code's Python Interactive window.
+In JupyterLab, Jupytext supports opening `.py` files as notebooks and saving both
+paired representations. Start JupyterLab from this folder with the Conda environment
+active if you prefer that interface; restart its server after first installing Jupytext.
+
+You can run this project's default offline demo directly as Python:
 
 ```bash
-git add agentic_lime_decisions.ipynb
-git diff --cached
-git commit -m "Describe the LIME change"
-git push -u origin my-lime-change
+python agentic_lime_decisions.py
 ```
 
-Open a pull request into `main` on GitHub. Stage README or environment changes
-explicitly when needed. Keep changes small and coordinate edits to the same cells.
-Save uncommitted work on your working branch before switching branches.
+This runs every code cell from top to bottom, including the batch walkthrough.
+It creates local results in `outputs/lime-notebook/`. Figures depend on your
+Matplotlib backend; headless environments may not show windows. Notebook-style
+rich display is not identical to terminal output. Future IPython magic commands
+or shell escapes would need review before standalone execution.
 
-Official tool references: [nbstripout](https://github.com/kynan/nbstripout) and
-[nbdime Git integration](https://nbdime.readthedocs.io/en/stable/vcs.html).
+Only notebook inputs and cell boundaries travel through the Python source.
+Generated charts, execution counts, outputs, and editor metadata remain local.
+Embedded cell attachments are not the collaboration format for this branch;
+use separately versioned image assets if you later need persistent illustrations.
+There are no Git filters, hooks, or automatic commits required by this workflow.
+The old clone's notebook filter can remain unused: ignored notebooks are not staged.
+
+Official references: [Jupytext pairing](https://jupytext.org/using/paired-notebooks/),
+[VS Code integration](https://jupytext.org/integrations/vs-code/), and the
+[Jupytext Sync extension](https://marketplace.visualstudio.com/items?itemName=caenrigen.jupytext-sync).
 
 ## Follow the flow
 

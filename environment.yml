@@ -20,6 +20,5 @@ dependencies:
       - jupyterlab>=4,<5
       - ipykernel>=6
       - ipywidgets>=8
-      - nbstripout==0.9.1
-      - nbdime==4.0.4
       - nbformat==5.10.4
+      - jupytext==1.19.6

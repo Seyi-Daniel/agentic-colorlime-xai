@@ -1,0 +1,6 @@
+# Work in a local notebook; review and commit its Python cell source.
+formats = "ipynb,py:percent"
+
+# Kernel selection, execution state, cell IDs, and editor settings stay local.
+notebook_metadata_filter = "-all"
+cell_metadata_filter = "-all"
