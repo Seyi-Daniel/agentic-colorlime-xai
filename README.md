@@ -25,10 +25,62 @@ jupytext --sync agentic_lime_decisions.py
 
 For an existing environment, use `conda env update -n agentic-lime-notebook -f environment.yml`.
 Open the generated `agentic_lime_decisions.ipynb` in VS Code or JupyterLab and
-select the environment's kernel. Set `IMAGE_PATHS` in the Run settings cell to
-your existing image files. Put `OPENAI_API_KEY` in a local `.env` or process
+select the environment's kernel. Configure image selection as described below. Put `OPENAI_API_KEY` in a local `.env` or process
 environment. The first run can download pretrained ViT weights from Hugging Face.
-Images and model weights are not bundled. Empty or missing image paths stop setup.
+Images and model weights are not bundled. Invalid explicit paths or folders
+without readable images stop setup before model loading or API calls.
+
+## Selecting images
+
+In the Run settings cell:
+
+```python
+IMAGE_PATHS = []
+IMAGE_FOLDER = None
+RUN_ALL_IMAGES = False
+IMAGE_SELECTION_SEED = None
+```
+
+The selection order is:
+
+1. **Explicit image files:** set `IMAGE_PATHS` to one file or a list of files.
+   All listed files run, in the supplied order, regardless of RUN_ALL_IMAGES.
+   Duplicate paths run once. Explicit files take precedence over IMAGE_FOLDER.
+2. **An explicit folder:** set IMAGE_FOLDER, or put a folder path in IMAGE_PATHS.
+   A folder in IMAGE_PATHS takes precedence over IMAGE_FOLDER.
+3. **Default folder:** with neither supplied, use `images/` in the notebook's
+   working directory; if that directory does not exist, use `image/`.
+
+For a folder, False selects one image uniformly at random; True runs all readable
+images in filename order. IMAGE_SELECTION_SEED can be set to an integer to repeat
+a selection from the same sorted folder contents. None makes a fresh random choice
+each time the input-preparation cell runs; a repeat selection is possible.
+
+```python
+# One exact image, anywhere on your computer:
+IMAGE_PATHS = "/Users/yourname/Pictures/bird.jpg"
+
+# Several exact images (all of these run):
+IMAGE_PATHS = ["images/bird.jpg", "/Users/yourname/Pictures/cat.png"]
+
+# A custom folder, random one:
+IMAGE_PATHS = []
+IMAGE_FOLDER = "/Users/yourname/Pictures/research"
+RUN_ALL_IMAGES = False
+
+# All images in that folder:
+RUN_ALL_IMAGES = True
+```
+
+A folder path can also be assigned directly to IMAGE_PATHS. Relative paths resolve
+from the working directory; absolute paths and `~/` paths are accepted. Scanning
+is nonrecursive and checks image readability with Pillow rather than trusting file
+extensions. Non-image/corrupt files are skipped and reported. The notebook prints
+file and readable-image counts plus the selected paths. Explicit invalid files
+raise an error rather than silently choosing another image. A present but empty
+`images/` directory raises an error; it does not silently switch to `image/`.
+The existing per-image size limits still apply when a selected image is loaded.
+RUN_ALL_IMAGES can trigger billed live requests for each selected image.
 
 ## Run
 
@@ -93,7 +145,7 @@ and Jupytext Sync for notebook editing and automatic synchronization.
 ## Validation scope
 
 The live-only revision is checked for syntax, Jupytext round-trip preservation,
-request validation and missing-input behavior. An end-to-end real-image run
+request validation, image-selection precedence, folder scanning and missing-input behavior. An end-to-end real-image run
 requires your images, model download/cache and API access; it is not claimed as
 completed by this revision. Explanation algorithms are retained from Zain's engine.
 

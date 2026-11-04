@@ -10,3 +10,6 @@ images/
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Alternative default input folder.
+image/

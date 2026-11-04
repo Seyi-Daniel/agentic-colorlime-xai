@@ -1154,6 +1154,82 @@ def run_batch(inputs, predictor, controller_factory, output_root, config=None,
 
 
 # %% [markdown]
+# ### Image selection
+#
+# Explicit files take priority. Otherwise scan the supplied folder, or images/
+# (falling back to image/) in the working directory. Folder scanning examines
+# direct files only; unreadable images and other files are skipped and reported.
+
+# %%
+def select_image_inputs(image_paths=None, image_folder=None, run_all=False, seed=None):
+    """Resolve explicit files or select readable images from one local folder."""
+    import random
+    if not isinstance(run_all, bool):
+        raise TypeError("RUN_ALL_IMAGES must be True or False")
+
+    def resolve(value):
+        return Path(value).expanduser().resolve()
+
+    def readable(path):
+        try:
+            with Image.open(path) as image:
+                image.verify()
+            # Verification alone does not decode every supported image format.
+            with Image.open(path) as image:
+                image.convert("RGB").load()
+            return True
+        except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+            return False
+
+    if image_paths is None:
+        explicit = []
+    elif isinstance(image_paths, (str, Path)):
+        explicit = [] if str(image_paths).strip() == "" else [resolve(image_paths)]
+    elif isinstance(image_paths, (list, tuple)):
+        explicit = [resolve(value) for value in image_paths]
+    else:
+        raise TypeError("IMAGE_PATHS must be a file/folder path or a list of file paths")
+
+    # Accept a folder in IMAGE_PATHS as a convenience, including [folder].
+    if len(explicit) == 1 and explicit[0].is_dir():
+        folder = explicit[0]
+    elif explicit:
+        invalid = [str(path) for path in explicit if not path.is_file() or not readable(path)]
+        if invalid:
+            raise ValueError("Explicit paths must all be readable image files: " + ", ".join(invalid))
+        selected = list(dict.fromkeys(explicit))
+        print(f"Using {len(selected)} explicitly selected image(s):")
+        for path in selected:
+            print(f"  {path}")
+        return selected
+    elif image_folder is not None and str(image_folder).strip():
+        folder = resolve(image_folder)
+    else:
+        folder = next((Path.cwd() / name for name in ("images", "image")
+                       if (Path.cwd() / name).is_dir()), None)
+        if folder is None:
+            raise FileNotFoundError("No images/ or image/ folder in the working directory. "
+                                    "Create one, set IMAGE_FOLDER, or supply IMAGE_PATHS.")
+
+    if not folder.is_dir():
+        raise NotADirectoryError(f"Image folder does not exist or is not a directory: {folder}")
+    files = sorted((path for path in folder.iterdir() if path.is_file()), key=lambda path: path.name)
+    eligible = [path for path in files if readable(path)]
+    skipped = [path for path in files if path not in eligible]
+    print(f"Folder: {folder} | files: {len(files)} | readable images: {len(eligible)} "
+          f"| skipped files: {len(skipped)}")
+    for path in skipped:
+        print(f"  Skipped unreadable/non-image file: {path.name}")
+    if not eligible:
+        raise ValueError(f"No readable images found directly inside {folder}")
+    selected = eligible if run_all else [random.Random(seed).choice(eligible)]
+    print(f"Selected {len(selected)} image(s) ({'all' if run_all else 'random one'}):")
+    for path in selected:
+        print(f"  {path}")
+    return selected
+
+
+# %% [markdown]
 # ## 4. Run settings
 
 # %%
@@ -1161,7 +1237,10 @@ import os
 from dotenv import load_dotenv
 from IPython.display import display
 load_dotenv()
-IMAGE_PATHS = []  # Required: paths to your real local image files.
+IMAGE_PATHS = []  # File path, list of file paths, or a folder path; takes priority.
+IMAGE_FOLDER = None  # Optional folder; otherwise use ./images/ then ./image/.
+RUN_ALL_IMAGES = False  # For folder input: False = random one, True = every image.
+IMAGE_SELECTION_SEED = None  # Optional integer for repeatable random selection.
 REQUESTED_CLASS_ID = None
 OUTPUT_ROOT = Path("outputs/live-research")
 CONFIG = RunConfig(max_candidates=3,
@@ -1172,13 +1251,11 @@ CONFIG = RunConfig(max_candidates=3,
 # ## 5. Prepare the classifier and inputs
 
 # %%
-if not IMAGE_PATHS or not all(Path(x).is_file() for x in IMAGE_PATHS):
-    raise ValueError("Set IMAGE_PATHS to existing local image files before running")
+inputs = select_image_inputs(IMAGE_PATHS, IMAGE_FOLDER, RUN_ALL_IMAGES, IMAGE_SELECTION_SEED)
 if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("Set OPENAI_API_KEY in the environment or local .env")
 predictor = ViTClassifier(CONFIG.model_id, batch_size=CONFIG.batch_size,
                           local_files_only=False)
-inputs = list(IMAGE_PATHS)
 controller_factory = lambda: AgentController(OpenAITransport(CONFIG))
 
 
