@@ -1312,3 +1312,7 @@ display(result_table(all_sessions))
 # Batch DIR uses selected completed images only and reports coverage and failures.
 # API counts record attempted provider calls, including requests that fail.
 # Token usage is recorded only when returned by the provider.
+
+# %%
+print("Hello Zain")
+print("Hello Zain 2")
