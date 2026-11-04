@@ -1,0 +1,54 @@
+{
+  "archived_on": "2026-11-04",
+  "archive_branch": "archive-snapshots-02",
+  "previous_archive": "archive-snapshots",
+  "successor_source": {
+    "branch": "seyi/zain/develop_merge",
+    "commit": "ba274b5313a3bb7f90ccfe1645be0d6ab8c4bab7",
+    "tree": "232ccaf8af10a0fd5759f0c1e3f71c9fab41ba40",
+    "folder": "seyi__zain__develop_merge"
+  },
+  "successor_branches": [
+    "develop",
+    "seyi/develop_01",
+    "zain/develop_01"
+  ],
+  "snapshots": [
+    {
+      "branch": "seyi/develop",
+      "commit": "8d89f57f3e44e8bc2ce7a452a01e3382ebbfa510",
+      "tree": "12912a2eda08cd62f152910dc5dcf0c0844ce2dc",
+      "folder": "seyi__develop"
+    },
+    {
+      "branch": "seyi/zain/develop_jupytext",
+      "commit": "202580f680ff8fb4f4478242eabfbd69d29531e0",
+      "tree": "7001aba79cfe2188be5fc1eefcd689cb6343d8d2",
+      "folder": "seyi__zain__develop_jupytext"
+    },
+    {
+      "branch": "seyi/zain/develop_merge",
+      "commit": "ba274b5313a3bb7f90ccfe1645be0d6ab8c4bab7",
+      "tree": "232ccaf8af10a0fd5759f0c1e3f71c9fab41ba40",
+      "folder": "seyi__zain__develop_merge"
+    },
+    {
+      "branch": "zain/develop_current",
+      "commit": "84454b6fcd822a040f7c0443de2f0f953ad1f0c2",
+      "tree": "5c73f403643d00f34163226a20bc236a28ae3147",
+      "folder": "zain__develop_current"
+    },
+    {
+      "branch": "zain/develop_jupytext",
+      "commit": "202580f680ff8fb4f4478242eabfbd69d29531e0",
+      "tree": "7001aba79cfe2188be5fc1eefcd689cb6343d8d2",
+      "folder": "zain__develop_jupytext"
+    },
+    {
+      "branch": "zain/develop_merge",
+      "commit": "86c4e84f53bf35428d20b0a04f04ae81f8ee2c1a",
+      "tree": "753b9929054bf7c87b81af5598b8dadcdd9b4d06",
+      "folder": "zain__develop_merge"
+    }
+  ]
+}
