@@ -16,7 +16,7 @@ and multi-image processing.
 ## Setup
 
 ```bash
-git clone --branch seyi/zain/develop_merge https://github.com/Seyi-Daniel/agentic-colorlime-xai.git
+git clone --branch develop https://github.com/Seyi-Daniel/agentic-colorlime-xai.git
 cd agentic-colorlime-xai
 conda env create -f environment.yml
 conda activate agentic-lime-notebook
