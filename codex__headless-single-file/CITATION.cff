@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this research software, please cite it using this metadata."
+title: "Agentic Color-LIME XAI"
+type: software
+authors:
+  - family-names: "Odun-Ayo"
+    given-names: "Daniel"
+version: 0.1.0
+date-released: 2026-08-12
+license: MIT
+repository-code: "https://github.com/Seyi-Daniel/agentic-colorlime-xai"
+keywords:
+  - explainable artificial intelligence
+  - agentic artificial intelligence
+  - LIME
+  - computer vision
+

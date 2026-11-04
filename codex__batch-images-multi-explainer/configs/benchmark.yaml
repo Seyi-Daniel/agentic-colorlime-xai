@@ -1,0 +1,29 @@
+name: benchmark
+description: Exact profile associated with the August 6 benchmark.
+
+application:
+  model_id: google/vit-base-patch16-224
+  dataset_id: ILSVRC/imagenet-1k
+  dataset_split: validation
+  start_index: 0
+  screened_images: 100
+  evaluate_correct_predictions_only: true
+  device: auto
+
+experiment:
+  lime_num_samples: 1000
+  lime_batch_size: 32
+  inference_batch_size: 128
+  random_seed: 42
+  hide_color: 0
+  critical_area_fraction: 0.20
+  omission_rgb: [0, 0, 0]
+  colorlime_k: 256
+  colorlime_n_init: 3
+  colorlime_max_iter: 200
+  colorlime_tol: 0.0001
+
+notes:
+  - The standalone benchmark preserves standard LIME's default mean off-state.
+  - Color-LIME Black uses a black off-state during explanation generation.
+  - CIR and DIR use black deletion for every method.

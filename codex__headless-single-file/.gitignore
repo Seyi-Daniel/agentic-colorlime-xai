@@ -1,0 +1,33 @@
+.env
+.env.*
+!.env.example
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Generated runs may contain input images, model evidence, and API audit data.
+/outputs/
+**/llm_audit/
+
+# Large or restricted research artifacts are not source code.
+/data/
+/models/
+/checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+*.zip
+

@@ -1,0 +1,59 @@
+{
+  "archived_on": "2026-11-04",
+  "archive_branch": "archive-snapshots",
+  "promoted_to_main": {
+    "branch": "codex/jupytext-notebook-workflow",
+    "commit": "31524cb3dedc4fb006ed1dcf79b3e04730b2b42a",
+    "tree": "31b1d199898d0431fbde4d375659388a3f880bb9"
+  },
+  "snapshots": [
+    {
+      "branch": "archive/main-before-notebook-2026-10-13",
+      "commit": "821bf0ed0523ec7feac4847684cbc7134b63af24",
+      "tree": "b6152f591a2626254c88a46b41b0f53f956a8052",
+      "folder": "archive__main-before-notebook-2026-10-13"
+    },
+    {
+      "branch": "codex/annotated-single-file",
+      "commit": "5856d8c6b444ba2caf3c91b40181a45321e8ac94",
+      "tree": "54f0e00f6046092abd988dbd3be30b40548d3cd0",
+      "folder": "codex__annotated-single-file"
+    },
+    {
+      "branch": "codex/batch-images-multi-explainer",
+      "commit": "e712b316c8c28f5f4d950a7d50555fd36eeb11db",
+      "tree": "6d2977a0c37f9c21230b2d85ad5f6cbc906de8c7",
+      "folder": "codex__batch-images-multi-explainer"
+    },
+    {
+      "branch": "codex/headless-single-file",
+      "commit": "aa9e42cb0c02683a18a0009cc080059191a2093b",
+      "tree": "8c2ba6ffda8e2bcb6c54f98ce32f8f309e91f6df",
+      "folder": "codex__headless-single-file"
+    },
+    {
+      "branch": "codex/lime-decisions-notebook",
+      "commit": "b21130955cb9f92d738246b61804fb799c3a0f22",
+      "tree": "620b28a616fb0afe2c6091b4944a9226839512be",
+      "folder": "codex__lime-decisions-notebook"
+    },
+    {
+      "branch": "codex/notebook-collaboration",
+      "commit": "e58dc3a4afd99bb0a954b0ba9353b797820aa8a1",
+      "tree": "ab7d6e24cd4bc37b6e8eab0e8b7b3c3ff616124f",
+      "folder": "codex__notebook-collaboration"
+    },
+    {
+      "branch": "main",
+      "commit": "65c8fa97c142037c6ad15cfe046d2afeeacf1230",
+      "tree": "a4073142b8ed63266f4e711274fb767f5537aa62",
+      "folder": "main"
+    },
+    {
+      "branch": "zain_demo",
+      "commit": "9d267fc4209d767963c46f6ece50f4bd9afd7821",
+      "tree": "8f66f87e46e67674dd1bc086d31bc4297f0fa102",
+      "folder": "zain_demo"
+    }
+  ]
+}
