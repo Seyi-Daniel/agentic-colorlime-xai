@@ -1,5 +1,5 @@
 # Interactive notebook copies are reconstructed from the tracked Python source.
-*.ipynb
+#*.ipynb
 .ipynb_checkpoints/
 
 # Generated results and private local inputs/configuration.
