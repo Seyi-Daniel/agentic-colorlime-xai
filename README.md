@@ -7,7 +7,7 @@ so GitHub shows code and Markdown changes rather than notebook JSON.
 code cells; `# %% [markdown]` markers preserve headings and explanations. Everyone
 can reconstruct the notebook from the same tracked source.
 
-## Files on this branch
+## Repository files
 
 - **[agentic_lime_decisions.py](agentic_lime_decisions.py)** — the complete notebook source tracked by Git.
 - **README.md** — setup and collaboration instructions.
@@ -17,17 +17,18 @@ can reconstruct the notebook from the same tracked source.
 - **.vscode/extensions.json** — recommends the Python, Jupyter, and Jupytext Sync extensions.
 
 `agentic_lime_decisions.ipynb` is generated locally and is not tracked on this
-branch. The previous notebook-only workflow remains on
-[`codex/notebook-collaboration`](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/codex/notebook-collaboration).
-Your existing test-print cell is preserved in the Python source.
+branch. Historical versions, including the previous notebook-only workflow, are preserved as folders on
+[archive-snapshots](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive-snapshots).
+The former notebook workflow is in
+[codex__notebook-collaboration](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive-snapshots/codex__notebook-collaboration).
 
 ## 1. Clone and install with Conda
 
-Use a new folder to try this branch:
+Clone the repository into a new folder:
 
 ```bash
-git clone --branch codex/jupytext-notebook-workflow https://github.com/Seyi-Daniel/agentic-colorlime-xai.git agentic-lime-jupytext
-cd agentic-lime-jupytext
+git clone https://github.com/Seyi-Daniel/agentic-colorlime-xai.git
+cd agentic-colorlime-xai
 conda env create -f environment.yml
 conda activate agentic-lime-notebook
 ```
@@ -77,6 +78,12 @@ setup cell for this VS Code workflow.
 
 ## 3. Edit, review, commit, and push
 
+Start a feature branch for your change:
+
+```bash
+git switch -c my-lime-change
+```
+
 Run cells, inspect results, edit code or Markdown, and save as usual. Before each
 commit, use the terminal in the repository folder to ensure synchronization:
 
@@ -87,15 +94,14 @@ git diff -- agentic_lime_decisions.py
 git add agentic_lime_decisions.py
 git diff --cached
 git commit -m "Describe the notebook change"
-git push
+git push -u origin HEAD
 ```
 
 The explicit sync is also the fallback if you do not install the VS Code sync
 extension. Commit the `.py` source, not the `.ipynb`. Stage README/environment/
-configuration edits explicitly when needed. The initial clone already tracks the
-remote test branch, so `git push` updates it. For a new feature branch, create it
-with `git switch -c my-lime-change` and publish it with
-`git push -u origin my-lime-change`; then open a pull request.
+configuration edits explicitly when needed. The clone starts on `main`; publish
+your feature branch with the command above, then open a pull request into `main`.
+Subsequent pushes on that feature branch can use `git push`.
 
 **Expected:** running cells, changing kernels, and saving outputs causes no Python
 source diff. Changing a Python line or Markdown text changes that line in GitHub.
