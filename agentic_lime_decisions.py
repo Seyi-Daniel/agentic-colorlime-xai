@@ -1,15 +1,14 @@
 # %% [markdown]
 # # Agentic XAI: shared notebook workflow
 #
-# A sequential Jupytext notebook based on main's offline-first, multi-image workflow,
-# using Zain's LIME, GradCAM/GradCAM++, compact selection/review loop and numbered
-# run reports. Run from the top; demo mode is synthetic software validation only.
+# A sequential Jupytext notebook for real-image experiments with pretrained ViT,
+# live agent selection/review, LIME, GradCAM/GradCAM++, and numbered run reports.
 
 # %% [markdown]
 # ## 1. Environment
 #
-# Create the environment from environment.yml. The walkthrough defaults to an
-# offline LIME demonstration; live mode requires local images and an API key.
+# Create the environment from environment.yml. Supply local image files and
+# an API key before running. Executing agent cells makes billed API requests.
 
 # %% [markdown]
 # ## 2. Core implementation
@@ -56,7 +55,6 @@ from skimage.util import regular_grid
 
 @dataclass(frozen=True)
 class RunConfig:
-    offline: bool = True
     model_id: str = "google/vit-base-patch16-224"
     agent_model: str = "gpt-5-mini"
     seed: int = 42
@@ -409,8 +407,7 @@ def _cam_explanation(session, method):
     validate_mask(mask, session.image.shape)
     return mask, {"heatmap": heatmap}, {
         "segmentation": None,
-        "target_layer": "last ViT block pre-attention LayerNorm" if isinstance(session.predictor, ViTClassifier)
-                        else "synthetic workflow map",
+        "target_layer": "last ViT block pre-attention LayerNorm",
         "local_fidelity_r2": None,
         "fidelity_scope": "not applicable: CAM fits no local surrogate",
         "warnings": [],
@@ -680,8 +677,7 @@ def build_agent_request(session):
     top = np.argsort(-session.probabilities)[:5]
     state = {"phase": session.stage, "image_id": session.image_id,
              "classifier": {"type": type(session.predictor).__name__,
-                            "model_id": (session.config.model_id if isinstance(session.predictor, ViTClassifier)
-                                         else "synthetic-demo"),
+                            "model_id": session.config.model_id,
                             "image_width": int(session.image.shape[1]),
                             "image_height": int(session.image.shape[0])},
              "target": {"id": session.target, "label": session.predictor.label(session.target),
@@ -721,59 +717,50 @@ def build_agent_request(session):
 
 # %%
 
-def _live_request_cost_ceiling(request):
-    """Conservative standard-rate estimate for a bounded gpt-5-mini vision request."""
+def validate_live_request(request):
+    """Validate the actual outgoing request size and configured model."""
     if request.get("model") != "gpt-5-mini" or request.get("max_output_tokens") != 4096:
-        raise RuntimeError("Live cost guard is calibrated only for gpt-5-mini with 4096 output tokens")
+        raise RuntimeError("Live requests require gpt-5-mini with 4096 output tokens")
     bounded = json.loads(json.dumps(request, allow_nan=False))
     images = 0
     for item in bounded["input"][0]["content"]:
         if item["type"] == "input_image":
             url = item.get("image_url", "")
             if not url.startswith("data:image/jpeg;base64,"):
-                raise RuntimeError("Live cost guard requires bounded JPEG image inputs")
+                raise RuntimeError("Live requests require bounded JPEG image inputs")
             with Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1], validate=True))) as picture:
                 if max(picture.size) > 640:
-                    raise RuntimeError("Live cost guard requires images at most 640 pixels per side")
+                    raise RuntimeError("Live requests require images at most 640 pixels per side")
             item["image_url"] = "<bounded image>"
             images += 1
     if not 1 <= images <= 3:
-        raise RuntimeError("Live cost guard requires one to three image inputs")
+        raise RuntimeError("Live requests require one to three image inputs")
     text_bytes = len(json.dumps(bounded, ensure_ascii=False).encode("utf-8"))
     if text_bytes > 100_000:
         raise RuntimeError("Live request exceeded the 100 KB text and schema budget")
-    # Each 640 x 640 image needs at most 400 patches x 1.2 tokens.
-    return ((text_bytes + 480 * images) * 0.25 + 4096 * 2.00) / 1_000_000
 
 
 class OpenAITransport:
-    """Explicit opt-in transport. Offline sessions cannot instantiate it."""
+    """Bounded live requests with provider-reported token usage."""
 
-    is_offline = False
 
-    def __init__(self, config: RunConfig, *, allow_real_api=False, client=None):
-        if config.offline or not allow_real_api:
-            raise RuntimeError("Real OpenAI transport requires offline=False and allow_real_api=True")
+    def __init__(self, config: RunConfig):
+        import os
+        from dotenv import dotenv_values
+        from openai import OpenAI
         self.request_limit = config.max_agent_calls
         self.request_count = 0
-        self.estimated_cost_ceiling = 0.0
         self.usage = []
-        if client is None:
-            import os
-            from dotenv import dotenv_values
-            from openai import OpenAI
-            key = dotenv_values(Path.cwd() / ".env").get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-            if not key:
-                raise ValueError("OPENAI_API_KEY is required for explicitly enabled live mode")
-            client = OpenAI(api_key=key, timeout=120, max_retries=0)
-        self.client = client
+        key = dotenv_values(Path.cwd() / ".env").get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not key:
+            raise ValueError("OPENAI_API_KEY is required")
+        self.client = OpenAI(api_key=key, timeout=120, max_retries=0)
 
     def send(self, request):
-        ceiling = _live_request_cost_ceiling(request)
-        if self.request_count >= self.request_limit or self.estimated_cost_ceiling + ceiling > 1.0:
-            raise RuntimeError("Live API request or estimated $1 cost budget reached")
+        validate_live_request(request)
+        if self.request_count >= self.request_limit:
+            raise RuntimeError("Live API request limit reached")
         self.request_count += 1
-        self.estimated_cost_ceiling += ceiling
         response = self.client.responses.create(**request)
         usage = getattr(response, "usage", None)
         if usage is not None:
@@ -783,15 +770,15 @@ class OpenAITransport:
 
 
 class AgentController:
-    def __init__(self, transport, mode="offline_scripted"):
+    def __init__(self, transport: OpenAITransport):
+        if not isinstance(transport, OpenAITransport):
+            raise TypeError("AgentController requires OpenAITransport")
         self.transport = transport
-        self.mode = mode
+        self.mode = "live_openai"
         self.call_count = 0
         self.requests = []
 
     def choose(self, session):
-        if session.config.offline and not getattr(self.transport, "is_offline", False):
-            raise RuntimeError("Offline session refuses a transport that may contact the network")
         request = build_agent_request(session)
         self.requests.append(request)
         self.call_count += 1
@@ -853,8 +840,13 @@ class RunSession:
                  config: RunConfig | None = None, requested_class: int | None = None,
                  image_id: str | None = None):
         self.config = config or RunConfig()
+        if not isinstance(source, (str, Path)) or not Path(source).is_file():
+            raise ValueError("Provide an existing local image file")
+        if not isinstance(predictor, ViTClassifier):
+            raise TypeError("RunSession requires the pretrained ViT classifier")
+        self.source = str(Path(source).resolve())
         self.image = load_rgb(source, self.config)
-        self.image_id = image_id or _image_folder_name(source, "synthetic-image")
+        self.image_id = image_id or _image_folder_name(source, "image")
         self.predictor, self.controller = predictor, controller
         self.probabilities = predict_checked(predictor, self.image)[0]
         self.original_top1 = int(self.probabilities.argmax())
@@ -884,14 +876,14 @@ class RunSession:
         best = best_observed_candidate(self)
         write_json(self.directory / "result.json", {
             "image_id": self.image_id, "mode": self.controller.mode,
+            "source": self.source, "model_id": self.config.model_id,
             "status": self.status, "stage": self.stage, "stop_reason": self.stop_reason,
             "target": self.target, "target_label": self.predictor.label(self.target),
             "target_source": self.target_source, "original_top1": self.original_top1,
             "predictions": self.probabilities, "config": asdict(self.config),
-            "simulated_api_calls": self.controller.call_count if self.config.offline else None,
-            "real_openai_calls": self.controller.call_count if not self.config.offline else 0,
+            "agent_decision_attempts": self.controller.call_count,
+            "real_openai_calls": self.controller.transport.request_count,
             "provider_usage": getattr(self.controller.transport, "usage", None),
-            "estimated_cost_ceiling_usd": getattr(self.controller.transport, "estimated_cost_ceiling", None),
             "decision": self.decision,
             "best_observed": ({"candidate_id": best["id"], "method": best["method"],
                                "confidence_drop": best["impact"]["confidence_drop"],
@@ -946,7 +938,7 @@ def run_agent_step(session: RunSession):
     if session.done:
         return {"status": session.status, "message": "Session already ended"}
     if session.controller.call_count >= session.config.max_agent_calls:
-        session.stop("budget_exhausted", "Maximum simulated/real agent calls reached")
+        session.stop("budget_exhausted", "Maximum agent decision attempts reached")
         return {"status": session.status, "message": session.stop_reason}
     before = session.stage
     event = {"round": len(session.timeline) + 1, "stage_before": before}
@@ -964,7 +956,6 @@ def run_agent_step(session: RunSession):
             if spec["method"] in ("gradcam", "gradcam++"):
                 session.attempted_cams.add(spec["method"])
             candidate = generate_candidate(session, spec)
-            candidate["simulated_api_calls"] = 1 if session.config.offline else None
             session.candidates.append(candidate)
             event["candidate_id"] = candidate["id"]
             event["candidate_status"] = candidate["status"]
@@ -977,7 +968,6 @@ def run_agent_step(session: RunSession):
         else:
             candidate = session.candidates[-1]
             candidate["review"] = value
-            candidate["simulated_api_calls"] = 2 if session.config.offline else None
             decision = value["decision"]
             if decision == "accept":
                 chosen = next(c for c in session.candidates if c["id"] == value["candidate_id"])
@@ -1040,8 +1030,7 @@ def result_table(sessions):
                          "Decision": None, "Reason": session.stop_reason,
                          "Final method": None, "Best observed method": None,
                          "Best observed drop": None,
-                         "Simulated calls": session.controller.call_count
-                         if session.config.offline else None})
+                         "Session API attempts": session.controller.transport.request_count})
         for candidate in session.candidates:
             impact = candidate.get("impact") or {}
             review = candidate.get("review") or {}
@@ -1063,10 +1052,8 @@ def result_table(sessions):
                          "Final method": session.decision["method"] if session.decision else None,
                          "Best observed method": best["method"] if best else None,
                          "Best observed drop": best["impact"]["confidence_drop"] if best else None,
-                         "Simulated calls": candidate.get("simulated_api_calls")})
+                         "Session API attempts": session.controller.transport.request_count})
     table = pd.DataFrame(rows)
-    if sessions and all(not session.config.offline for session in sessions):
-        table = table.drop(columns=["Simulated calls"])
     return table
 
 
@@ -1088,38 +1075,9 @@ def batch_summary(sessions):
             "DIR_definition": "Top-1 class changed after fixed RGB omission; selected completed images only",
             "mean_CIR": float(np.mean([c["impact"]["cir"] for c in selected])) if selected else None,
             "target_policy": "Local top-1 by default, validated manual class override when provided",
-            "simulated_api_calls": sum(s.controller.call_count for s in sessions)
-                                   if sessions and all(s.config.offline for s in sessions) else None,
-            "real_openai_calls": sum(s.controller.call_count for s in sessions
-                                     if not s.config.offline)}
+            "real_openai_calls": sum(s.controller.transport.request_count for s in sessions)}
 
 
-def workflow_comparison(sessions):
-    """Reconstruct old calls from the preserved notebook's state machine.
-
-    Estimates assume one valid selection/review path per candidate. Failures
-    and invalid responses can make actual historical call counts differ.
-    """
-    rows = []
-    for session in sessions:
-        old_estimate = 1  # choose_target
-        for candidate in session.candidates:
-            old_estimate += (6 if candidate["method"] == "lime" else 4)
-            old_estimate += 1  # start_new_candidate or finish_selection
-        manifest_path = session.directory / "request_manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        rows.append({"Image": session.image_id,
-                     "Old calls (reconstructed)": old_estimate,
-                     ("New calls (mock observed)" if session.config.offline else
-                       "New agent decisions (live observed)"): session.controller.call_count,
-                     "Old default image sends": 0,
-                     "New selection image sends": sum(m["image_count"] == 1 for m in manifest
-                                                       if m["phase"] == "select"),
-                     "New review image sends": sum(m["image_count"] for m in manifest
-                                                    if m["phase"] == "review"),
-                     "New max text chars": max((m["text_chars"] for m in manifest), default=0),
-                     "Old 1000-label field": "present" if len(session.probabilities) == 1000 else "not applicable"})
-    return pd.DataFrame(rows)
 
 
 def show_candidate(session, candidate_id=None):
@@ -1152,52 +1110,14 @@ def show_candidate(session, candidate_id=None):
 
 
 # %% [markdown]
-# ## 3. Offline demonstration and batch processing
+# ## 3. Multi-image processing
 #
-# Main’s synthetic classifier and inputs remain available. Batch failures stay explicit in coverage and errors. All modes use the same explanation engine.
+# Each image uses the pretrained classifier and a fresh live agent session. Failures remain explicit in coverage and errors.
 
 # %%
-class DemoClassifier:
-    """Known color-based classifier for an offline software demonstration."""
-    def label(self, class_id):
-        return ["red signal", "green signal", "blue signal"][class_id]
-
-    def predict_proba(self, images):
-        a = np.asarray(images, dtype=float) / 255.0
-        signals = a.mean(axis=(1, 2))
-        logits = 6 * signals
-        scores = np.exp(logits - logits.max(axis=1, keepdims=True))
-        return scores / scores.sum(axis=1, keepdims=True)
-
-def make_demo_image():
-    image = np.full((64, 64, 3), [15, 30, 60], dtype=np.uint8)
-    image[8:56, 8:44] = [220, 20, 20]
-    image[24:48, 44:60] = [25, 180, 30]
-    return image
 
 
-class DemoTransport:
-    """Deterministic protocol exercise; no model inference or network calls."""
-    is_offline = True
 
-    def send(self, request):
-        state = json.loads(request['input'][0]['content'][0]['text'])
-        if state['phase'] == 'select':
-            second = bool(state['previous_candidates'])
-            name = 'select_lime_colorlime' if second else 'select_lime_slic'
-            arguments = {'segmentation': ({'k': 3, 'n_init': 3, 'max_iter': 200, 'tol': 1e-4} if second else {'n_segments': 16, 'compactness': 10.0, 'sigma': 0.0}),
-                         'lime': {**LIME_DEFAULTS, 'num_samples': 200, 'num_features': 3 if second else 8, 'hide_color': 'black', 'feature_selection': 'highest_weights'},
-                         'reason': 'Exercise the shared pipeline using main’s synthetic image.'}
-        else:
-            name = 'review_candidate'
-            finish = len(state['previous_candidates']) >= 2
-            eligible = [c for c in state['previous_candidates'] if c.get('confidence_drop') is not None]
-            best = max(eligible, key=lambda c: c['confidence_drop'])
-            arguments = {'decision': 'accept' if finish else 'retry', 'candidate_id': best['id'] if finish else None,
-                         'reason': 'Accept for the deterministic workflow demonstration only.',
-                         'limitations': 'Synthetic classifier and scripted review; not scientific validation.'}
-        return {'output': [{'type': 'function_call', 'name': name,
-                            'arguments': json.dumps(arguments)}]}
 
 
 def run_batch(inputs, predictor, controller_factory, output_root, config=None,
@@ -1229,7 +1149,6 @@ def run_batch(inputs, predictor, controller_factory, output_root, config=None,
                        dir_denominator=sum(s.status == 'completed' for s in sessions))
         write_json(root / 'batch_summary.json', summary)
     result_table(sessions).to_csv(root / 'batch_results.csv', index=False)
-    workflow_comparison(sessions).to_csv(root / 'workflow_comparison.csv', index=False)
     return {'directory': root, 'sessions': sessions, 'summary': summary}
 
 
@@ -1242,11 +1161,10 @@ import os
 from dotenv import load_dotenv
 from IPython.display import display
 load_dotenv()
-MODE = "demo"  # "live" uses real images, pretrained ViT and billed API calls.
-IMAGE_PATHS = []
+IMAGE_PATHS = []  # Required: paths to your real local image files.
 REQUESTED_CLASS_ID = None
-OUTPUT_ROOT = Path("outputs/lime-notebook")
-CONFIG = RunConfig(offline=(MODE == "demo"), max_candidates=3,
+OUTPUT_ROOT = Path("outputs/live-research")
+CONFIG = RunConfig(max_candidates=3,
                    max_agent_calls=6, max_samples=200)
 
 
@@ -1254,22 +1172,14 @@ CONFIG = RunConfig(offline=(MODE == "demo"), max_candidates=3,
 # ## 5. Prepare the classifier and inputs
 
 # %%
-if MODE == "demo":
-    predictor = DemoClassifier()
-    inputs = [make_demo_image(), np.fliplr(make_demo_image()).copy()]
-    controller_factory = lambda: AgentController(DemoTransport())
-elif MODE == "live":
-    if not IMAGE_PATHS or not all(Path(x).is_file() for x in IMAGE_PATHS):
-        raise ValueError("Set IMAGE_PATHS to existing local images")
-    if not os.getenv("OPENAI_API_KEY"):
-        raise ValueError("Set OPENAI_API_KEY in the environment or local .env")
-    predictor = ViTClassifier(CONFIG.model_id, batch_size=CONFIG.batch_size,
-                              local_files_only=False)
-    inputs = list(IMAGE_PATHS)
-    controller_factory = lambda: AgentController(
-        OpenAITransport(CONFIG, allow_real_api=True), mode="live_openai")
-else:
-    raise ValueError("MODE must be demo or live")
+if not IMAGE_PATHS or not all(Path(x).is_file() for x in IMAGE_PATHS):
+    raise ValueError("Set IMAGE_PATHS to existing local image files before running")
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("Set OPENAI_API_KEY in the environment or local .env")
+predictor = ViTClassifier(CONFIG.model_id, batch_size=CONFIG.batch_size,
+                          local_files_only=False)
+inputs = list(IMAGE_PATHS)
+controller_factory = lambda: AgentController(OpenAITransport(CONFIG))
 
 
 # %% [markdown]
@@ -1301,7 +1211,6 @@ for candidate in session.candidates:
     show_candidate(session, candidate['id'])
 result_table([session]).to_csv(session.directory / 'batch_results.csv', index=False)
 write_json(session.directory / 'batch_summary.json', batch_summary([session]))
-workflow_comparison([session]).to_csv(session.directory / 'workflow_comparison.csv', index=False)
 print("Saved:", session.directory)
 
 
@@ -1323,6 +1232,6 @@ display(result_table(all_sessions))
 #
 # Signed confidence drops, actual omitted area and best observed candidates are
 # retained from Zain. LIME fidelity is training fit, not held-out validation.
-# CAMs require the live ViT; the demo does not simulate CAM evidence. Batch DIR
-# uses selected completed images only and reports coverage and failures.
-# The legacy call comparison is reconstructed, not a new benchmark of main.
+# Batch DIR uses selected completed images only and reports coverage and failures.
+# API counts record attempted provider calls, including requests that fail.
+# Token usage is recorded only when returned by the provider.
