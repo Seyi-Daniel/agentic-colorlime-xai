@@ -1,3 +1,347 @@
+# Agentic LIME: notebook editing, readable GitHub changes
+
+Work in a Jupyter notebook in VS Code. Commit its Jupytext Python representation
+so GitHub shows code and Markdown changes rather than notebook JSON.
+
+**The implementation remains one sequential document.** `# %%` markers preserve
+code cells; `# %% [markdown]` markers preserve headings and explanations. Everyone
+can reconstruct the notebook from the same tracked source.
+
+## Repository files
+
+- **[agentic_lime_decisions.py](agentic_lime_decisions.py)** — the complete notebook source tracked by Git.
+- **README.md** — setup and collaboration instructions.
+- **[environment.yml](environment.yml)** — the Conda environment and Python packages.
+- **[jupytext.toml](jupytext.toml)** — pairing and metadata policy shared by collaborators.
+- **.gitignore** — excludes local notebooks, outputs, images, and private `.env` files.
+
+`agentic_lime_decisions.ipynb` is generated locally and is not tracked on this
+branch. Historical versions, including the previous notebook-only workflow, are preserved as folders on
+[archive-snapshots](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive-snapshots).
+The former notebook workflow is in
+[codex__notebook-collaboration](https://github.com/Seyi-Daniel/agentic-colorlime-xai/tree/archive-snapshots/codex__notebook-collaboration).
+
+## 1. Clone and install with Conda
+
+Clone the repository into a new folder:
+
+```bash
+git clone https://github.com/Seyi-Daniel/agentic-colorlime-xai.git
+cd agentic-colorlime-xai
+conda env create -f environment.yml
+conda activate agentic-lime-notebook
+```
+
+If that Conda environment already exists, replace the create command with:
+
+```bash
+conda env update -n agentic-lime-notebook -f environment.yml
+```
+
+Conda automatically processes the environment file's `pip:` section. There is no
+separate requirements file or virtual-environment setup. Git and Conda must be
+installed first, and package installation needs an internet connection.
+
+## 2. Reconstruct and open your notebook in VS Code
+
+From this repository folder, with the Conda environment active:
+
+```bash
+jupytext --sync agentic_lime_decisions.py
+```
+
+This creates `agentic_lime_decisions.ipynb` with the same code, Markdown, and cell
+order. It does not execute any cells. Outputs appear when you run the notebook.
+You can regenerate the notebook from a fresh clone whenever needed.
+
+Open this folder in VS Code. Install the recommended extensions:
+
+1. **Python** by Microsoft (`ms-python.python`).
+2. **Jupyter** by Microsoft (`ms-toolsai.jupyter`).
+3. **Jupytext Sync** by Victor Negirneac (`caenrigen.jupytext-sync`).
+
+Use **Python: Select Interpreter** to select the `agentic-lime-notebook` Conda
+environment; this lets Jupytext Sync find the installed Jupytext package. Open
+`agentic_lime_decisions.ipynb` and select that environment as the notebook kernel
+as well. These are separate selections in VS Code.
+
+Keep both the `.ipynb` and `.py` files open in tabs. Edit the `.ipynb` normally.
+Jupytext Sync updates the paired source when you save. Wait for synchronization
+before staging. **Installing the Python package alone does not enable automatic
+syncing in VS Code.** If the extension cannot find Jupytext, run **Jupytext: Locate
+Python and Jupytext** or **Jupytext: Show Logs** from the Command Palette and check
+that it is using the Conda environment.
+
+You do not need `jupyter lab`, a registered named kernel, or the old Git-cleaning
+setup cell for this VS Code workflow.
+
+## 3. Edit, review, commit, and push
+
+Start a feature branch for your change:
+
+```bash
+git switch -c my-lime-change
+```
+
+Run cells, inspect results, edit code or Markdown, and save as usual. Before each
+commit, use the terminal in the repository folder to ensure synchronization:
+
+```bash
+conda activate agentic-lime-notebook
+jupytext --sync agentic_lime_decisions.ipynb
+git diff -- agentic_lime_decisions.py
+git add agentic_lime_decisions.py
+git diff --cached
+git commit -m "Describe the notebook change"
+git push -u origin HEAD
+```
+
+The explicit sync is also the fallback if you do not install the VS Code sync
+extension. Commit the `.py` source, not the `.ipynb`. Stage README/environment/
+configuration edits explicitly when needed. The clone starts on `main`; publish
+your feature branch with the command above, then open a pull request into `main`.
+Subsequent pushes on that feature branch can use `git push`.
+
+**Expected:** running cells, changing kernels, and saving outputs causes no Python
+source diff. Changing a Python line or Markdown text changes that line in GitHub.
+Adding a cell adds a `# %%` boundary plus its source, without notebook JSON.
+
+## 4. Receive a collaborator's changes
+
+Save, synchronize, and commit your own source changes first. Close the notebook
+editor before pulling, so an old in-memory notebook cannot overwrite newer source.
+Then run:
+
+```bash
+git pull --ff-only
+jupytext --sync agentic_lime_decisions.py
+```
+
+Reopen the notebook in VS Code. The collaborator's code and cell structure are now
+present. The sync can retain local outputs for unchanged cells, but those outputs
+are not evidence that the new source has run. Restart the kernel and rerun the
+relevant cells (or run from the top) to refresh your results.
+
+If you and a collaborator edited the same source lines, resolve the conflict in
+`.py` like an ordinary Python file, then sync and reopen the notebook. If Jupytext
+reports conflicting edits to both local representations, preserve both versions
+and reconcile their source before syncing; do not force an overwrite blindly.
+
+## 5. Small collaboration test
+
+From a fresh clone after initial synchronization:
+
+1. Run the first code cell and save. Sync the notebook with the command above.
+   `git diff -- agentic_lime_decisions.py` should be empty.
+2. Add `# Collaboration test` inside an existing code cell, save, and sync.
+   The Python diff should show only that comment. Commit and push it.
+3. In a second clone, create the local notebook with `jupytext --sync
+   agentic_lime_decisions.py`. The comment should appear in the reconstructed cell.
+4. Edit a different cell in the second notebook, sync, commit, and push. In the
+   first clone, close the notebook and follow the pull/sync steps above.
+
+No notebook execution counts, editor metadata, or outputs belong in those commits.
+The ignored `.ipynb` can still be marked modified by the editor because it holds
+local results; Git Source Control should show the shared `.py` source edits.
+
+## Other ways to use the same source
+
+The `# %%` cells can also run individually in VS Code's Python Interactive window.
+In JupyterLab, Jupytext supports opening `.py` files as notebooks and saving both
+paired representations. Start JupyterLab from this folder with the Conda environment
+active if you prefer that interface; restart its server after first installing Jupytext.
+
+This branch preserves Zain's live workflow. Running the Python source executes
+the same live cells as Run All, including paid requests after setup.
+
+Only notebook inputs and cell boundaries travel through the Python source.
+Generated charts, execution counts, outputs, and editor metadata remain local.
+Embedded cell attachments are not the collaboration format for this branch;
+use separately versioned image assets if you later need persistent illustrations.
+There are no Git filters, hooks, or automatic commits required by this workflow.
+The old clone's notebook filter can remain unused: ignored notebooks are not staged.
+
+Official references: [Jupytext pairing](https://jupytext.org/using/paired-notebooks/),
+[VS Code integration](https://jupytext.org/integrations/vs-code/), and the
+[Jupytext Sync extension](https://marketplace.visualstudio.com/items?itemName=caenrigen.jupytext-sync).
+
+
+## Zain implementation and setup
+
+
+
+The notebook code and Markdown are converted to Jupytext. A redundant future
+import is removed so standalone Python also parses. The environment follows
+the shared five-file layout; no image, model weights,
+external scripts, presentation or historical output folders were supplied.
+References to those artifacts in the original README describe Zain's machine.
+
+```bash
+conda env create -f environment.yml
+conda activate agentic-lime-notebook
+```
+
+Generate with `jupytext --sync agentic_lime_decisions.py`, then open `agentic_lime_decisions.ipynb` and select this environment's kernel.
+Set IMAGE_PATHS to one existing local image and set OPENAI_API_KEY in .env.
+Before the first run, populate the model cache (requires internet):
+
+```bash
+python -c 'from transformers import AutoImageProcessor, AutoModelForImageClassification; m="google/vit-base-patch16-224"; AutoImageProcessor.from_pretrained(m); AutoModelForImageClassification.from_pretrained(m)'
+```
+
+Run All makes real, billed API requests. The supplied cost guard is an estimate
+from the original implementation, not a guaranteed current price or spending cap.
+Results go to outputs/live-image-runs/<image>/run-XX/.
+
+## Original Zain documentation
+
+# Agentic XAI live notebook
+
+`agentic_lime_decisions.ipynb` is a self-contained **live** one-image research
+workflow. It uses cached pretrained ViT locally, sends bounded image requests
+to the OpenAI agent for method selection and review, calculates LIME, GradCAM,
+and GradCAM++ locally, and saves every result in a numbered image folder.
+The default input is `imagenet_sample_100/n01616318_vulture.JPEG`.
+
+## Run in VS Code
+
+1. Open this project folder and select the `agentic-lime-notebook` Conda kernel.
+   If an older editor tab is open, reopen the notebook from disk and restart
+   the kernel so external edits are not overwritten.
+2. Keep `OPENAI_API_KEY` in this folder's `.env`; never paste it into a cell.
+3. In the Run settings cell, change only `IMAGE_PATHS` to a list containing one
+   local image path when you want to test another image.
+4. Select **Run All**. This notebook runs live by default and makes real API
+   requests. Each Run All allows at most three candidates and six agent
+   requests. SDK retries are disabled, output tokens and images are bounded,
+   and the transport enforces a conservative US$1 estimated-cost guard for
+   `gpt-5-mini`. Each new Run All is a new experiment with its own request cap.
+
+The image is classified locally before the first API request. The target class
+is ViT's top prediction unless a valid `REQUESTED_CLASS_ID` is set. Check the
+target printed by the notebook; the filename alone does not set the class.
+The model weights load from the local cache, and CPU execution can take time.
+
+If the Conda environment does not exist yet, create it from `environment.yml`
+and select it as the VS Code notebook kernel:
+
+```powershell
+conda env create -f environment.yml
+conda activate agentic-lime-notebook
+python -m ipykernel install --user --name agentic-lime-notebook --display-name "Agentic XAI"
+```
+
+## Saved results
+
+For an input named `n01616318_vulture.JPEG`, the notebook saves to
+`outputs/live-image-runs/vulture/run-XX/`. A different filename gets its own
+image folder. Each numbered run contains `result.json`, `timeline.json`,
+`explanation.md`, `request_manifest.json`, candidate images and arrays,
+`batch_results.csv`, `batch_summary.json`, and `workflow_comparison.csv`.
+The root `outputs/live-image-runs/` contains image folders only; the notebook
+no longer writes duplicate batch files there. `result.json` and the table
+include the **best observed** candidate even if the agent stops inconclusive;
+that descriptive field does not claim the explanation was validated.
+
+The notebook itself does not import `agentic_xai.py`. That file loads its tagged
+core cells for historical command-line scripts and deterministic tests; the
+legacy scripted helpers live there, outside the live notebook. The earlier
+notebook is preserved in `backups/agentic_lime_decisions.pre-live-only-2026-11-03.ipynb`.
+
+## Agent workflow
+
+1. Run local classification once. Use top-1 as the target unless a valid manual
+   override is supplied. Target selection requires zero agent calls.
+2. Build a compact multimodal selection request with the original image,
+   target, top-five predictions, remaining budget, and previous candidate
+   summaries. One strict tool call supplies method and all parameters.
+3. Validate the tool arguments and reject unsupported, malformed, or repeated
+   configurations before local computation.
+4. Run LIME, GradCAM, or GradCAM++ locally. Validate the mask/heatmap, save
+   visuals, omit the selected region using the configured RGB baseline, and
+   classify the omitted image locally.
+5. Build a review request with the candidate explanation, omitted image,
+   metrics, and compact prior results. The agent can retry, stop inconclusive,
+   or select any measured candidate, including an earlier one. A candidate ID
+   is required for acceptance; an ID supplied with retry or inconclusive is
+   ignored because those decisions do not select a candidate.
+6. Stop at the candidate or agent-call budget and save the decision rationale.
+
+Selection requests include the original image when a fresh method choice is
+needed. Review requests do **not** resend the original. Requests are stateless:
+the agent receives compact structured summaries instead of an expanding full
+conversation history. API images are bounded JPEG data URLs; the initial image
+uses `detail="low"`, while explanation reviews use `detail="high"`. Full-size
+PNG artifacts remain saved locally. These input forms are described in the
+[OpenAI image input guide](https://developers.openai.com/api/docs/guides/images-vision).
+Tool schemas use strict function calling with required fields and no additional
+object properties, following the [OpenAI function-calling guide](https://developers.openai.com/api/docs/guides/function-calling).
+
+## Explanation methods and metrics
+
+- LIME retains the five segmenters and configurable perturbation, kernel,
+  feature-selection, and surrogate options from the earlier notebook.
+- GradCAM uses class-score gradients of patch tokens at the **last ViT block's
+  pre-attention LayerNorm**. The class token is excluded and the patch grid is
+  derived from processed image dimensions and patch size. Hooking after the
+  final attention block would leave final patch-token gradients uninformative
+  for the class-token classifier. See the
+  [ViT CAM adaptation note](https://github.com/jacobgil/pytorch-grad-cam/blob/master/tutorials/vision_transformers.md).
+- GradCAM++ uses the same activations and class target with the established
+  gradient-square/cube approximation to the method's weighting formula. It
+  does **not** compute exact second/third derivatives. This matches the
+  [pytorch-grad-cam implementation](https://github.com/jacobgil/pytorch-grad-cam/blob/master/pytorch_grad_cam/grad_cam_plusplus.py)
+  of the [original GradCAM++ method](https://arxiv.org/abs/1710.11063).
+  The ViT adaptation is experimental and requires further localization review.
+
+The fixed omission metric uses the same original image, target class,
+classifier, and configured black RGB baseline for all three methods:
+
+- **Confidence drop** = `p(target | original) − p(target | omitted)`; it remains
+  signed so confidence increases are visible.
+- **CIR** = `max(confidence drop, 0)` for continuity with earlier results.
+- **Relative CIR** = `CIR / p(target | original)`.
+- **Removed area** = fraction of input pixels omitted.
+- **DIR** = fraction of selected, completed images whose top-1 class changed
+  after omission.
+- **LIME local fit R²** is a weighted training fit on LIME perturbations; it is
+  not held-out fidelity and does not apply to CAM methods.
+
+LIME removes whole positive-weight segments until the area threshold is met;
+CAMs remove the hottest pixel fraction. Actual removed area is reported because
+the mask geometry and area can differ. Confidence drop alone is not proof of
+semantic correctness or localization. The old workflow call count in the
+comparison table is reconstructed from the preserved state machine; the new
+mock count is distinct from the real OpenAI request count saved with each live
+result.
+
+## Historical research results
+
+The separate four-image scripted study on goose, garden spider, peacock, and
+frilled lizard remains under `outputs/presentation-experiments/` and in the
+presentation gallery. It is **not** part of the live notebook's Run All.
+Historical experiment scripts and their deterministic tests remain available
+through `agentic_xai.py`; they do not represent a live LLM validation. The old
+`check_offline_notebook.py` and `verify_jupyter_kernel.py` helpers target the
+previous offline notebook layout and are not the way to run this live notebook.
+
+A prior live goose run is saved at `outputs/live-image-runs/goose/run-01/`:
+GradCAM++ was accepted after a 0.891777 target-probability drop with 20% of
+pixels omitted. A live vulture run is saved at
+`outputs/live-image-runs/vulture/run-01/`: LIME was accepted, but its mask
+covered 51.3% of the image and should be presented with that limitation.
+Goldfish runs under `outputs/live-goldfish/` stopped inconclusive because the
+fixed-area masks produced very small confidence changes. Agent acceptance
+and omission scores are exploratory evidence, not proof of semantic
+localization.
+
+For the earlier interactive workflow and four-image gallery, see
+`presentation/agentic_xai_interactive_flow.html` and
+`presentation/four_image_experiment_gallery.html`. Implementation history and
+validation details are in `DEVELOPMENT_LOG.md`.
+
+## Preserved development log
+
 # Development log — 2026-10-20 meeting implementation
 
 ## Scope and preservation
@@ -452,3 +796,27 @@ Notebook JSON validation and compilation of every code cell passed. The 17
 existing compatibility unit tests passed; no API requests were made for this
 cleanup. The latest live vulture run remains in its existing run folder and
 was not overwritten.
+
+## License
+
+MIT License
+
+Copyright (c) 2026 Daniel Odun-Ayo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
