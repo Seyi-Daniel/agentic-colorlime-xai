@@ -14,7 +14,6 @@ can reconstruct the notebook from the same tracked source.
 - **[environment.yml](environment.yml)** — the Conda environment and Python packages.
 - **[jupytext.toml](jupytext.toml)** — pairing and metadata policy shared by collaborators.
 - **.gitignore** — excludes local notebooks, outputs, images, and private `.env` files.
-- **.vscode/extensions.json** — recommends the Python, Jupyter, and Jupytext Sync extensions.
 
 `agentic_lime_decisions.ipynb` is generated locally and is not tracked on this
 branch. Historical versions, including the previous notebook-only workflow, are preserved as folders on
